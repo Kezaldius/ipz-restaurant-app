@@ -1,0 +1,31 @@
+# Віртуальне середовище
+venv/
+env/
+ENV/
+
+# Кеш Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Файли середовища
+.env
+.env.*
+
+# Бази даних
+*.db
+*.sqlite
+
+# Логи
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Інше
+.DS_Store
