@@ -348,6 +348,7 @@ class UserReservations(Resource):
         return reservation_schema.dump(reservations), 200
     
 def initialize_routes(api):
+    print("API маршрути запускаються")
     api.add_resource(UserRegistration, '/api/register')
     api.add_resource(UserLogin, '/api/login')
     api.add_resource(DishList, '/api/dishes')
@@ -360,3 +361,4 @@ def initialize_routes(api):
     api.add_resource(ReservationList, '/api/reservations')
     api.add_resource(ReservationResource, '/api/reservations/<int:reservation_id>')
     api.add_resource(UserReservations, '/api/users/<int:user_id>/reservations')
+    print("API маршрути запущені")
