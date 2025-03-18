@@ -23,13 +23,15 @@ class DishSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Dish
         load_instance = True
-        include_relationships = True 
+        include_fk = True
+        # include_relationships = True 
 
 class OrderItemSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = OrderItem
         load_instance = True
-        include_fk = True  
+        include_fk = True
+        exclude = ('order',)  
     
     dish = fields.Nested(DishSchema, only=('id','name', 'price')) # Вкладений об'єкт Dish (тільки id та name)
     price = auto_field(dump_only=True) # Тільки для читання
@@ -39,7 +41,7 @@ class OrderSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Order
         load_instance = True
-        include_relationships = True
+        # include_relationships = True
 
     items = fields.Nested(OrderItemSchema, many=True)
     user = fields.Nested(UserSchema, only=('id', 'username', 'email'))  # Вкладений об'єкт User

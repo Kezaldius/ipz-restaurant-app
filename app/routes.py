@@ -3,9 +3,10 @@ from flask_restful import Resource, reqparse
 from app import db
 from app.models import User, Dish, Order, OrderItem, Table, Reservation
 from app.schemas import UserSchema, DishSchema, OrderSchema, OrderItemSchema, TableSchema, ReservationSchema
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
+from marshmallow import ValidationError
 
 
 
@@ -66,18 +67,23 @@ class DishList(Resource):
     def post(self):
         dish_schema = DishSchema()
         try:
-            data = dish_schema.load(request.get_json())
-        except Exception as e:
-            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-
-        new_dish = Dish(**data)
-        db.session.add(new_dish)
-        try:
+            new_dish = dish_schema.load(request.get_json(), session=db.session)
+            
+            db.session.add(new_dish)
             db.session.commit()
+            
             return dish_schema.dump(new_dish), 201
-        except:
+            
+        except ValidationError as e:
             db.session.rollback()
-            return {'message': 'Помилка створення страви'}, 500
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except IntegrityError as e:
+            db.session.rollback()
+            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
+        except Exception as e:
+            db.session.rollback()
+            print(str(e))
+            return {'message': 'Помилка створення страви', 'error': str(e)}, 500
 
 class DishResource(Resource):
     def get(self, dish_id):
@@ -92,12 +98,19 @@ class DishResource(Resource):
 
         dish_schema = DishSchema()
         try:
-           updated_dish = dish_schema.load(request.get_json(), instance=dish, partial=True) #partial = True дозволяє оновлювати не всі поля
-        except Exception as e:
+           data = dish_schema.load(request.get_json(), session=db.session)
+           new_dish = Dish(**data)
+           db.session.add(new_dish)
+           db.session.commit()
+           return dish_schema.dump(new_dish), 201
+        except ValidationError as e:
+             db.session.rollback()
              return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except Exception as e: #Інші помилки
+             db.session.rollback()
+             print(str(e))
+             return {'message': 'Помилка створення страви'}, 500
 
-        db.session.commit()
-        return dish_schema.dump(updated_dish), 200
 
     def delete(self, dish_id):
          dish, status_code = get_object_or_404(Dish, dish_id)
@@ -110,16 +123,7 @@ class DishResource(Resource):
 # CRUD для замовлень
 
 class OrderList(Resource):
-   # def get(self):
-        #Захищаємо ендпоінт. Тільки адмін може отримати всі замовлення
-       # user_id = get_jwt_identity() #Якщо є JWT
-       # user = User.query.get(user_id)
-        #if not user or not user.is_admin:
-           # return {'message': 'Недостатньо прав'}, 403
 
-       # orders = Order.query.all()
-       # order_schema = OrderSchema(many=True)
-       # return order_schema.dump(orders), 200
    
     def post(self):
 
