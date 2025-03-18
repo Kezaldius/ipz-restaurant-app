@@ -1,7 +1,7 @@
 from app import db
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-
+from sqlalchemy.sql import func
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -48,7 +48,7 @@ class Order(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    order_date = db.Column(db.DateTime, default=datetime.utcnow)
+    order_date = db.Column(db.DateTime, default=func.now())
     status = db.Column(db.String(50), default='В обробці')  # Статус замовлення (наприклад, "В обробці", "Готується", "Доставлено")
     total_price = db.Column(db.Numeric(10, 2))
     delivery_address = db.Column(db.String(255))

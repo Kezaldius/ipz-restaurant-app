@@ -285,25 +285,42 @@ class TableResource(Resource):
 
 # CRUD для бронювань
 class ReservationList(Resource):
-
     def post(self):
-  
-
         reservation_schema = ReservationSchema()
         try:
-            data = reservation_schema.load(request.get_json())
-
+            data = request.get_json()
+            
+            # Перевірка на наявність столика
             table, status_code = get_object_or_404(Table, data['table_id'])
-            if status_code == 404: return table, status_code
-
-        except Exception as e:
-              return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-
-        new_reservation = Reservation(**data)
-        db.session.add(new_reservation)
-        try:
+            if status_code == 404: 
+                return table, status_code
+                
+            # Перевірка на справжність юзера (Змінити логіку коли додам можливість гостевих користувачей)
+            user, status_code = get_object_or_404(User, data['user_id'])
+            if status_code == 404: 
+                return user, status_code
+            
+            new_reservation = Reservation(
+                user_id=data['user_id'],
+                table_id=data['table_id'],
+                reservation_date=datetime.strptime(data['reservation_date'], '%Y-%m-%d %H:%M:%S'),
+                guest_count=data['guest_count'],
+                comments=data.get('comments'),
+                status=data.get('status', 'Підтверджено')
+            )
+            
+            db.session.add(new_reservation)
             db.session.commit()
+            
             return reservation_schema.dump(new_reservation), 201
+            
+        except ValidationError as e:
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except IntegrityError as e:
+            db.session.rollback()
+            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
+        except KeyError as e:
+            return {'message': f'Відсутнє обов\'язкове поле: {str(e)}'}, 400
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка створення бронювання', 'error': str(e)}, 500
@@ -312,8 +329,6 @@ class ReservationResource(Resource):
     def get(self, reservation_id):
         reservation, status_code = get_object_or_404(Reservation, reservation_id)
         if status_code == 404: return reservation, status_code
-
-
 
         reservation_schema = ReservationSchema()
         return reservation_schema.dump(reservation), 200
@@ -349,7 +364,6 @@ class UserReservations(Resource):
         user, status_code = get_object_or_404(User, user_id)
         if status_code == 404: return user, status_code
         
-        
         reservations = Reservation.query.filter_by(user_id=user_id).all()
         reservation_schema = ReservationSchema(many=True)
         return reservation_schema.dump(reservations), 200
@@ -368,4 +382,4 @@ def initialize_routes(api):
     api.add_resource(ReservationList, '/api/reservations')
     api.add_resource(ReservationResource, '/api/reservations/<int:reservation_id>')
     api.add_resource(UserReservations, '/api/users/<int:user_id>/reservations')
-    print("API маршрути запущені")
+    print("API маршрути запущені") # Видалити дебаг прінти при деплої
