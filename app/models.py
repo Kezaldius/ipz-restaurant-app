@@ -80,7 +80,7 @@ class Table(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     table_number = db.Column(db.Integer, unique=True, nullable=False)
-    capacity = db.Column(db.Integer, nullable=False)  # Кількість місць
+    capacity = db.Column(db.Integer, nullable=False)  # Кількість місць на столік
     is_available = db.Column(db.Boolean, default=True) #Чи вільний столик
 
     reservations = db.relationship('Reservation', backref='table', lazy='dynamic')

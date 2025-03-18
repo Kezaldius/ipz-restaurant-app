@@ -7,7 +7,11 @@ class UserSchema(SQLAlchemyAutoSchema):
         model = User
         load_instance = True  # Створювати об'єкт моделі при десеріалізації
         exclude = ('password_hash',)  # Виключаємо password_hash з виводу
+        include_relationships = False
+        include_fk = False
+    password = fields.String(load_only=True, required=True) # Отримуємо пароль, но не видаємо його в JSON
     
+
     #Процес валідації даних
     @validates('email')
     def validate_email(self, value):

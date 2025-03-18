@@ -22,14 +22,13 @@ class UserRegistration(Resource):
     def post(self):
         user_schema = UserSchema()
         try:
-            data = user_schema.load(request.get_json())
-        except Exception as e:
+            new_user = user_schema.load(request.get_json(), session=db.session)
+        except ValidationError as e:
              return {'message': 'Помилка валідації даних', 'errors': e.messages}, 400
 
-        # Перевірка на унікальність email та username вже є в схемі UserSchema
-
-        new_user = User(**data)
-        new_user.set_password(data['password'])  # Хешуємо пароль
+        # Перевірка на унікальність email та username вже є в схемі UserSchema (Оптимізувати)
+        if 'password' in request.get_json():
+            new_user.set_password(request.get_json()['password'])  # Хешуємо пароль
         db.session.add(new_user)
 
         try:
@@ -37,11 +36,11 @@ class UserRegistration(Resource):
             return user_schema.dump(new_user), 201  # Повертаємо створеного користувача
         except IntegrityError:  
             db.session.rollback()
-            return {'message': 'Помилка при створенні користувача'}, 500
+            return {'message': 'Помилка при створенні користувача', 'error': str(e)}, 500
 
 
 
-#  Вхід користувача (Login)
+#  Вхід користувача 
 class UserLogin(Resource):
      def post(self):
         parser = reqparse.RequestParser()
@@ -106,7 +105,7 @@ class DishResource(Resource):
         except ValidationError as e:
              db.session.rollback()
              return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-        except Exception as e: #Інші помилки
+        except Exception as e: 
              db.session.rollback()
              print(str(e))
              return {'message': 'Помилка створення страви'}, 500
@@ -235,18 +234,22 @@ class TableList(Resource):
         
         table_schema = TableSchema()
         try:
-            data = table_schema.load(request.get_json())
-        except Exception as e:
-             return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-
-        new_table = Table(**data)
-        db.session.add(new_table)
-        try:
+            data = table_schema.load(request.get_json(), session=db.session)
+            db.session.add(data)
             db.session.commit()
-            return table_schema.dump(new_table), 201
-        except:
+
+            return table_schema.dump(data), 201
+        
+        except ValidationError as e:
             db.session.rollback()
-            return {'message':'Помилка створення столика'}, 500
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except IntegrityError as e:
+            db.session.rollback()
+            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
+        except Exception as e:
+            db.session.rollback()
+            print(str(e))
+            return {'message': 'Помилка створення страви', 'error': str(e)}, 500
         
 
 class TableResource(Resource):
