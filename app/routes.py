@@ -1,13 +1,13 @@
 from flask import request, jsonify
 from flask_restx import Resource  
 from app import db, api 
+from app.api import *
 from app.models import *
 from app.schemas import *
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError, OperationalError
 from marshmallow import ValidationError
-from app.api import *
 
 def get_object_or_404(model, id):
     obj = model.query.get(id)
@@ -65,7 +65,7 @@ class UserLogin(Resource):
             return {'message': 'Невірне ім\'я користувача або пароль'}, 401
 
 
-@guests_ns.route('')
+@guests_ns.route('/')
 class GuestResource(Resource):
     @guests_ns.doc('create_or_get_guest')
     @guests_ns.expect(guest_input_model, validate=True)
