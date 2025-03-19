@@ -1,8 +1,8 @@
 from flask import request, jsonify
 from flask_restful import Resource, reqparse
 from app import db
-from app.models import User, Dish, Order, OrderItem, Table, Reservation
-from app.schemas import UserSchema, DishSchema, OrderSchema, OrderItemSchema, TableSchema, ReservationSchema
+from app.models import User, Dish, Order, OrderItem, Table, Reservation, Guest
+from app.schemas import UserSchema, DishSchema, OrderSchema, OrderItemSchema, TableSchema, ReservationSchema, GuestSchema
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -38,6 +38,36 @@ class UserRegistration(Resource):
             db.session.rollback()
             return {'message': 'Помилка при створенні користувача', 'error': str(e)}, 500
 
+#Гостьовий клас без реєстрації
+class GuestResource(Resource):
+    def post(self):
+        """Створення або отримання гостя за номером телефону"""
+        try:
+            data = request.get_json()
+
+            if not data or 'phone_number' not in data:
+                return {"message": "Потрібно вказати номер телефону"}, 400
+
+            # Перевіряємо, чи існує вже гість з таким номером
+            guest = Guest.query.filter_by(phone_number=data['phone_number']).first()
+                
+            if not guest:
+                # Створюємо нового гостя
+                guest = Guest(
+                    phone_number=data['phone_number'],
+                    name=data.get('name', '')
+                )
+                db.session.add(guest)
+                db.session.commit()
+                    
+            guest_schema = GuestSchema()
+            return guest_schema.dump(guest), 200
+                
+        except ValidationError as e:
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except Exception as e:
+            db.session.rollback()
+            return {'message': 'Помилка при обробці запиту', 'error': str(e)}, 500
 
 
 #  Вхід користувача 
@@ -50,7 +80,6 @@ class UserLogin(Resource):
 
         user = User.query.filter_by(username=args['username']).first()
         if user and user.check_password(args['password']):
-
             return {'message': 'Успішний вхід', 'user_id': user.id}, 200
         else:
             return {'message': 'Невірне ім\'я користувача або пароль'}, 401
@@ -122,26 +151,48 @@ class DishResource(Resource):
 # CRUD для замовлень
 
 class OrderList(Resource):
-
-   
     def post(self):
-
         try:
             data = request.get_json()
-           # data['user_id'] = user_id # Додаємо id користувача до даних замовлення.
         except:
-            return {'message': 'Некоректні данні'}, 400
+            return {'message': 'Некоректні дані'}, 400
         
         # Валідація даних
         if not data or 'items' not in data or not data['items']:
-             return {'message': "Необхідно вказати список страв"}, 400
+            return {'message': "Необхідно вказати список страв"}, 400
         
-        # Перевірка наявності юзера
-        user, status_code = get_object_or_404(User, data['user_id'])
-        if status_code == 404: return user, status_code
+        # Перевірка автентифікації - користувач або гість
+        user_id = data.get('user_id')
+        phone_number = data.get('phone_number')
+        
+        if not user_id and not phone_number:
+            return {'message': "Потрібно вказати user_id або phone_number"}, 400
+        
+        # Якщо вказано номер телефону (гостьове замовлення)
+        guest_id = None
+        if phone_number:
+            # Знаходимо або створюємо гостя
+            guest = Guest.query.filter_by(phone_number=phone_number).first()
+            if not guest:
+                guest = Guest(phone_number=phone_number, name=data.get('name', ''))
+                db.session.add(guest)
+                db.session.flush()  # Отримуємо ID без коміту
+            guest_id = guest.id
+        
+        # Якщо вказано ID користувача
+        elif user_id:
+            user, status_code = get_object_or_404(User, user_id)
+            if status_code == 404: 
+                return user, status_code
         
         # Створення замовлення
-        order = Order(user_id=data['user_id'], delivery_address = data.get('delivery_address'), comments=data.get('comments'))
+        order = Order(
+            user_id=user_id,
+            guest_id=guest_id, 
+            phone_number=phone_number,
+            delivery_address=data.get('delivery_address'), 
+            comments=data.get('comments')
+        )
 
         total_price = 0
         # Обробка елементів замовлення (страв)
@@ -154,7 +205,7 @@ class OrderList(Resource):
                 return {'message': f'Страва "{dish.name}" недоступна'}, 400
 
             if item_data['quantity'] <= 0:
-                 return {'message': "Кількість страв має бути більше нуля"}, 400
+                return {'message': "Кількість страв має бути більше нуля"}, 400
 
             order_item = OrderItem(dish=dish, quantity=item_data['quantity'], price=dish.price)
             order.items.append(order_item)
@@ -166,11 +217,11 @@ class OrderList(Resource):
         try:
             db.session.commit()
             order_schema = OrderSchema()
-            return order_schema.dump(order), 201  # Повертаємо створене замовлення
+            return order_schema.dump(order), 201
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка створення замовлення', 'error': str(e)}, 500
-
+        
 class OrderResource(Resource):
 
     def get(self, order_id):
@@ -220,7 +271,25 @@ class UserOrders(Resource):
         orders = Order.query.filter_by(user_id=user_id).all()
         order_schema = OrderSchema(many=True)
         return order_schema.dump(orders), 200
-
+    
+#Отримання замовлень для конкретного гостя
+class GuestOrders(Resource):
+    def get(self, phone_number):
+        """Отримати всі замовлення за номером телефону гостя"""
+        try:
+            # Спочатку перевіряємо, чи існує гість
+            guest = Guest.query.filter_by(phone_number=phone_number).first()
+            if not guest:
+                return {'message': 'Гостя з таким номером не знайдено'}, 404
+                
+            # Знаходимо всі замовлення гостя
+            orders = Order.query.filter_by(guest_id=guest.id).all()
+            
+            order_schema = OrderSchema(many=True)
+            return order_schema.dump(orders), 200
+            
+        except Exception as e:
+            return {'message': 'Помилка при отриманні замовлень', 'error': str(e)}, 500
 
 # CRUD для столиків
 class TableList(Resource):
@@ -286,32 +355,58 @@ class TableResource(Resource):
 # CRUD для бронювань
 class ReservationList(Resource):
     def post(self):
-        reservation_schema = ReservationSchema()
         try:
             data = request.get_json()
             
-            # Перевірка на наявність столика
+            # Перевіряємо обов'язкові поля
+            if not data or 'table_id' not in data or 'reservation_date' not in data or 'guest_count' not in data:
+                return {'message': 'Не вказані обов\'язкові поля'}, 400
+            
+            # Перевіряємо автентифікацію - користувач або гість
+            user_id = data.get('user_id')
+            phone_number = data.get('phone_number')
+            
+            if not user_id and not phone_number:
+                return {'message': "Потрібно вказати user_id або phone_number"}, 400
+                
+            # Перевіряємо наявність столика
             table, status_code = get_object_or_404(Table, data['table_id'])
             if status_code == 404: 
                 return table, status_code
-                
-            # Перевірка на справжність юзера (Змінити логіку коли додам можливість гостевих користувачей)
-            user, status_code = get_object_or_404(User, data['user_id'])
-            if status_code == 404: 
-                return user, status_code
             
+            # Якщо вказано номер телефону (гостьове бронювання)
+            guest_id = None
+            if phone_number:
+                # Знаходимо або створюємо гостя
+                guest = Guest.query.filter_by(phone_number=phone_number).first()
+                if not guest:
+                    guest = Guest(phone_number=phone_number, name=data.get('name', ''))
+                    db.session.add(guest)
+                    db.session.flush()  # Отримуємо ID без коміту
+                guest_id = guest.id
+            
+            # Якщо вказано ID користувача
+            elif user_id:
+                user, status_code = get_object_or_404(User, user_id)
+                if status_code == 404: 
+                    return user, status_code
+            
+            # Створення бронювання
             new_reservation = Reservation(
-                user_id=data['user_id'],
+                user_id=user_id,
+                guest_id=guest_id,
                 table_id=data['table_id'],
                 reservation_date=datetime.strptime(data['reservation_date'], '%Y-%m-%d %H:%M:%S'),
                 guest_count=data['guest_count'],
                 comments=data.get('comments'),
-                status=data.get('status', 'Підтверджено')
+                status=data.get('status', 'Підтверджено'),
+                phone_number=phone_number or user.phone_number if user_id else None
             )
             
             db.session.add(new_reservation)
             db.session.commit()
             
+            reservation_schema = ReservationSchema()
             return reservation_schema.dump(new_reservation), 201
             
         except ValidationError as e:
@@ -319,11 +414,10 @@ class ReservationList(Resource):
         except IntegrityError as e:
             db.session.rollback()
             return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
-        except KeyError as e:
-            return {'message': f'Відсутнє обов\'язкове поле: {str(e)}'}, 400
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка створення бронювання', 'error': str(e)}, 500
+
 
 class ReservationResource(Resource):
     def get(self, reservation_id):
@@ -367,9 +461,29 @@ class UserReservations(Resource):
         reservations = Reservation.query.filter_by(user_id=user_id).all()
         reservation_schema = ReservationSchema(many=True)
         return reservation_schema.dump(reservations), 200
+
+#Отримання бронювань для конкретного гостя    
+class GuestReservations(Resource):
+    def get(self, phone_number):
+        """Отримати всі бронювання за номером телефону гостя"""
+        try:
+            # Спочатку перевіряємо, чи існує гість
+            guest = Guest.query.filter_by(phone_number=phone_number).first()
+            if not guest:
+                return {'message': 'Гостя з таким номером не знайдено'}, 404
+                
+            # Знаходимо всі бронювання гостя
+            reservations = Reservation.query.filter_by(guest_id=guest.id).all()
+            
+            reservation_schema = ReservationSchema(many=True)
+            return reservation_schema.dump(reservations), 200
+            
+        except Exception as e:
+            return {'message': 'Помилка при отриманні бронювань', 'error': str(e)}, 500
     
 def initialize_routes(api):
     print("API маршрути запускаються")
+
     api.add_resource(UserRegistration, '/api/register')
     api.add_resource(UserLogin, '/api/login')
     api.add_resource(DishList, '/api/dishes')
@@ -382,4 +496,9 @@ def initialize_routes(api):
     api.add_resource(ReservationList, '/api/reservations')
     api.add_resource(ReservationResource, '/api/reservations/<int:reservation_id>')
     api.add_resource(UserReservations, '/api/users/<int:user_id>/reservations')
+
+    api.add_resource(GuestResource, '/api/guests')
+    api.add_resource(GuestOrders, '/api/guests/<string:phone_number>/orders')
+    api.add_resource(GuestReservations, '/api/guests/<string:phone_number>/reservations')
+
     print("API маршрути запущені") # Видалити дебаг прінти при деплої

@@ -26,6 +26,22 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+class Guest(db.Model):
+    __tablename__ = 'guests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    phone_number = db.Column(db.String(20), nullable=False, unique=True)
+    name = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=func.now())
+    
+    orders = db.relationship('Order', backref='guest', lazy='dynamic', 
+                          foreign_keys='Order.guest_id')
+    reservations = db.relationship('Reservation', backref='guest', lazy='dynamic',
+                               foreign_keys='Reservation.guest_id')
+    
+    def __repr__(self):
+        return f'<Guest {self.phone_number}>'
+
 
 
 class Dish(db.Model):
@@ -47,17 +63,22 @@ class Order(db.Model):
     __tablename__ = 'orders'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    guest_id = db.Column(db.Integer, db.ForeignKey('guests.id'), nullable=True)
     order_date = db.Column(db.DateTime, default=func.now())
-    status = db.Column(db.String(50), default='В обробці')  # Статус замовлення (наприклад, "В обробці", "Готується", "Доставлено")
+    status = db.Column(db.String(50), default='В обробці')  # Статус замовлення ("В обробці", "Готується", "Доставлено", інші статуси)
     total_price = db.Column(db.Numeric(10, 2))
     delivery_address = db.Column(db.String(255))
     comments = db.Column(db.Text) # Коментарі до замовлення
+    phone_number = db.Column(db.String(20))
 
     items = db.relationship('OrderItem', backref='order', lazy='dynamic', cascade="all, delete-orphan")  # Зв'язок з елементами замовлення
 
     def __repr__(self):
-        return f'<Order {self.id} by User {self.user_id}>'
+        if self.user_id:
+            return f'<Order {self.id} by User {self.user_id}>'
+        else:
+            return f'<Order {self.id} by Guest {self.guest_id}>'
 
 class OrderItem(db.Model):
     __tablename__ = 'order_items'
@@ -92,14 +113,19 @@ class Reservation(db.Model):
     __tablename__ = 'reservations'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    guest_id = db.Column(db.Integer, db.ForeignKey('guests.id'), nullable=True)
     table_id = db.Column(db.Integer, db.ForeignKey('tables.id'), nullable=False)
     reservation_date = db.Column(db.DateTime, nullable=False)
     guest_count = db.Column(db.Integer, nullable=False)
     comments = db.Column(db.Text)
     status = db.Column(db.String, default='Підтверджено')
+    phone_number = db.Column(db.String(20), nullable=True)
 
     user = db.relationship('User')
 
     def __repr__(self):
-        return f'<Reservation for Table {self.table_id} by User {self.user_id} on {self.reservation_date}>'
+        if self.user_id:
+            return f'<Reservation for Table {self.table_id} by User {self.user_id} on {self.reservation_date}>'
+        else:
+            return f'<Reservation for Table {self.table_id} by Guest {self.guest_id} on {self.reservation_date}>'
