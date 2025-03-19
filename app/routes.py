@@ -1,14 +1,13 @@
 from flask import request, jsonify
 from flask_restx import Resource  
 from app import db, api 
-from app.models import User, Dish, Order, OrderItem, Table, Reservation, Guest
-from app.schemas import UserSchema, DishSchema, OrderSchema, OrderItemSchema, TableSchema, ReservationSchema, GuestSchema
+from app.models import *
+from app.schemas import *
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError, OperationalError
 from marshmallow import ValidationError
-from app.api import user_model,registration_model, guest_model, dish_model, order_item_model, order_model, table_model, reservation_model, users_ns, guests_ns, dishes_ns, orders_ns, tables_ns, reservations_ns # Імпорт моделей з api.py
-
+from app.api import *
 
 def get_object_or_404(model, id):
     obj = model.query.get(id)
@@ -20,7 +19,7 @@ def get_object_or_404(model, id):
 @users_ns.route('/register')
 class UserRegistration(Resource):
     @users_ns.doc('create_new_user')
-    @users_ns.expect(registration_model, validate=True)
+    @users_ns.expect(registration_model, validate=True, description="Дані для створення юзера. Поле `name` є необов'язковим.")
     @users_ns.response(201, 'User created successfully', user_model)
     @users_ns.response(400, 'Validation Error')
     @users_ns.response(500, 'Internal Server Error')
@@ -47,7 +46,7 @@ class UserRegistration(Resource):
 @users_ns.route('/login')
 class UserLogin(Resource):
     @users_ns.doc('user_login')
-    @users_ns.expect(user_model, validate=True)  # Можна створити окрему модель для логіну (лише username/password)
+    @users_ns.expect(user_model, validate=True)  
     @users_ns.response(200, 'Login successful')
     @users_ns.response(401, 'Invalid credentials')
     def post(self):
@@ -69,7 +68,7 @@ class UserLogin(Resource):
 @guests_ns.route('')
 class GuestResource(Resource):
     @guests_ns.doc('create_or_get_guest')
-    @guests_ns.expect(guest_model, validate=True)
+    @guests_ns.expect(guest_input_model, validate=True)
     @guests_ns.response(200, 'Guest found/created', guest_model)
     @guests_ns.response(400, 'Validation Error')
     def post(self):
@@ -257,7 +256,12 @@ class OrderList(Resource):
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка створення замовлення', 'error': str(e)}, 500
-
+    def get(self):
+        """Отримати всі замовлення"""
+        orders = Order.query.all()  # Отримуємо всі замовлення
+        order_schema = OrderSchema(many=True)
+        return order_schema.dump(orders), 200    
+    
 @orders_ns.route('/<int:order_id>')
 @orders_ns.param('order_id', 'The order identifier')
 class OrderResource(Resource):
@@ -486,6 +490,11 @@ class ReservationList(Resource):
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка створення бронювання', 'error': str(e)}, 500
+    def get(self):
+        """Отримати всі бронювання"""
+        reservations = Reservation.query.all()  # Отримуємо всі бронювання
+        reservation_schema = ReservationSchema(many=True)
+        return reservation_schema.dump(reservations), 200
 
 
 @reservations_ns.route('/<int:reservation_id>')
@@ -570,7 +579,5 @@ class GuestReservations(Resource):
         reservation_schema = ReservationSchema(many=True)
         return reservation_schema.dump(reservations), 200
     
-def initialize_routes(api):
-    #Видалено, оскільки тепер ми використовуємо декоратори
-    pass
+
 

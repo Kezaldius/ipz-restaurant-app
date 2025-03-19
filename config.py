@@ -11,7 +11,7 @@ class Config:
     RESTFUL_JSON = {'ensure_ascii': False,  'separators': (', ', ': '), 'indent': 2, 'sort_keys':True,
                     'default': lambda o: float(o) if isinstance(o, decimal.Decimal) else o
                     }
-
+    
 class DevelopmentConfig(Config):
     DEBUG = True
 

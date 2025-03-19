@@ -1,12 +1,10 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_restful import Api
 from config import config
 
 db = SQLAlchemy()
 migrate = Migrate()
-api = Api()
 
 def create_app(config_name='default'):
     app = Flask(__name__)
@@ -14,9 +12,7 @@ def create_app(config_name='default'):
     db.init_app(app)
     migrate.init_app(app, db)
 
-    api = Api(app)
-
-    from app.routes import initialize_routes
-    initialize_routes(api)
+    from app.api import api_bp
+    app.register_blueprint(api_bp, url_prefix='/api')
 
     return app

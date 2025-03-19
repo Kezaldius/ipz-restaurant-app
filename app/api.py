@@ -39,6 +39,11 @@ guest_model = api.model('Guest', {
     'created_at': fields.DateTime(description='Дата створення')
 })
 
+guest_input_model = api.model('GuestInput', {
+    'phone_number': fields.String(required=True, description='Номер телефону'),
+    'name': fields.String(required=False, description='Ім\'я гостя (необов\'язково)'),
+})
+
 dish_model = api.model('Dish', {
     'id': fields.Integer(readonly=True, description='ID страви'),
     'name': fields.String(required=True, description='Назва страви'),
@@ -95,3 +100,4 @@ dishes_ns = api.namespace('dishes', description='Операції зі стра�
 orders_ns = api.namespace('orders', description='Операції з замовленнями')
 tables_ns = api.namespace('tables', description='Операції зі столиками')
 reservations_ns = api.namespace('reservations', description='Операції з бронюваннями')
+
