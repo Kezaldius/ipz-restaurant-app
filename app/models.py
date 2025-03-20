@@ -57,6 +57,19 @@ class Dish(db.Model):
 
     def __repr__(self):
         return f'<Dish {self.name}>'
+    
+
+class News(db.Model):
+    __tablename__ = 'news'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    image_url = db.Column(db.String(255))  # URL зображення
+    is_actual = db.Column(db.Boolean, default=True)  # Чи актуальна новина
+
+    def __repr__(self):
+        return f'<News {self.name}>'
 
 
 class Order(db.Model):

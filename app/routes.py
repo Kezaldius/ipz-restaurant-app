@@ -581,3 +581,97 @@ class GuestReservations(Resource):
     
 
 
+@news_ns.route('')
+class NewsList(Resource):
+    @news_ns.doc('list_news')
+    @news_ns.response(200, 'Success', news_model)
+    @news_ns.response(400, 'Validation error')
+    def get(self):
+        """Отримати список усіх новин."""
+        news = News.query.all()
+        news_schema = NewsSchema(many=True)
+        return news_schema.dump(news), 200
+    
+    @news_ns.doc('create_news')
+    @news_ns.expect(news_model, validate=True)
+    @news_ns.response(201, 'News created', news_model)
+    @news_ns.response(400, 'Validation Error')
+    def post(self):
+        """Створити нову новину."""
+        news_schema = NewsSchema()
+        try:
+            new_news = news_schema.load(request.get_json(), session=db.session)
+
+            db.session.add(new_news)
+            db.session.commit()
+
+            return news_schema.dump(new_news), 201
+
+        except ValidationError as e:
+            db.session.rollback()
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except IntegrityError as e:
+            db.session.rollback()
+            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
+        except Exception as e:
+            db.session.rollback()
+            print(str(e))
+            return {'message': 'Помилка створення новини', 'error': str(e)}, 500
+        
+@news_ns.route('/<int:news_id>')
+@news_ns.param('news_id', 'The news identifier')
+class NewsResource(Resource):
+    @news_ns.doc('get_news')
+    @news_ns.response(200, 'Success', news_model)
+    @news_ns.response(404, 'News not found')
+    @news_ns.response(500, 'Internal Server Error')
+    def get(self, news_id):
+        """Отримати новину за ID."""
+        news_item, status_code = get_object_or_404(News, news_id)  #
+        if status_code == 404:
+            return news_item, status_code
+        news_schema = NewsSchema()
+        return news_schema.dump(news_item), 200
+
+    @news_ns.doc('update_news')
+    @news_ns.expect(news_model, validate=True)
+    @news_ns.response(200, 'News updated', news_model)
+    @news_ns.response(400, 'Validation Error')
+    @news_ns.response(404, 'News not found')
+    @news_ns.response(500, 'Internal Server Error')
+    def put(self, news_id):
+        """Оновити новину за ID."""
+        news_item, status_code = get_object_or_404(News, news_id)
+        if status_code == 404:
+            return news_item, status_code
+
+        news_schema = NewsSchema()
+        try:
+            updated_news = news_schema.load(
+                request.get_json(), instance=news_item, partial=True, session=db.session
+            )
+            db.session.commit()
+            return news_schema.dump(updated_news), 200
+        except ValidationError as e:
+            db.session.rollback()
+            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except Exception as e:
+            db.session.rollback()
+            return {'message': 'Помилка при оновленні новини', 'error': str(e)}, 500
+
+    @news_ns.doc('delete_news')
+    @news_ns.response(204, 'News deleted')
+    @news_ns.response(404, 'News not found')
+    @news_ns.response(500, 'Internal Server Error')
+    def delete(self, news_id):
+        """Видалити новину за ID."""
+        news_item, status_code = get_object_or_404(News, news_id)
+        if status_code == 404:
+            return news_item, status_code
+        try:
+            db.session.delete(news_item)
+            db.session.commit()
+            return '', 204  # 204 Нема валідного контенту на видалення
+        except Exception as e:
+            db.session.rollback()
+            return {'message':"Помилка при видаленні",  'error': str(e)}, 500

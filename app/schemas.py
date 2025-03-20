@@ -1,5 +1,5 @@
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
-from app.models import User, Dish, Order, OrderItem, Table, Reservation, Guest
+from app.models import User, Dish, Order, OrderItem, Table, Reservation, Guest, News
 from marshmallow import fields, ValidationError, validates, Schema
 
 class UserSchema(SQLAlchemyAutoSchema):
@@ -40,6 +40,12 @@ class DishSchema(SQLAlchemyAutoSchema):
         include_fk = True
         
     price = fields.Float()
+
+class NewsSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = News
+        load_instance = True
+        include_fk = True
 
 class OrderItemSchema(SQLAlchemyAutoSchema):
     class Meta:

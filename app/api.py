@@ -54,6 +54,14 @@ dish_model = api.model('Dish', {
     'is_available': fields.Boolean(description='Чи доступна страва')
 })
 
+news_model = api.model('News', {
+    'id': fields.Integer(readonly=True, description='ID страви'),
+    'name': fields.String(required=True, description='Назва новини'),
+    'description': fields.String(description='Опис новини'),
+    'image_url': fields.String(description='URL зображення'),
+    'is_actual': fields.Boolean(description='Чи актуальна новина')
+})
+
 order_item_model = api.model('OrderItem', {
     'id': fields.Integer(readonly=True, description='ID елемента замовлення'),
     'dish_id': fields.Integer(required=True, description='ID страви'),
@@ -100,4 +108,5 @@ dishes_ns = api.namespace('dishes', description='Операції зі стра�
 orders_ns = api.namespace('orders', description='Операції з замовленнями')
 tables_ns = api.namespace('tables', description='Операції зі столиками')
 reservations_ns = api.namespace('reservations', description='Операції з бронюваннями')
+news_ns = api.namespace('news', description='Операції з новинами')
 
