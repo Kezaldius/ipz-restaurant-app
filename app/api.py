@@ -108,24 +108,53 @@ news_model = api.model('News', {
     'is_actual': fields.Boolean(description='Чи актуальна новина')
 })
 
-order_item_model = api.model('OrderItem', {
+
+order_item_model_input = api.model('OrderItemInput', { #це модель для ВХІДНИХ даних
+    'dish_id': fields.Integer(required=True, description='ID базової страви'),
+    'variant_id': fields.Integer(required=True, description='ID вибраного варіанту страви (розмір, смак тощо)'), 
+    'quantity': fields.Integer(required=True, min=1, description='Кількість (має бути > 0)'),
+    'modifier_option_ids': fields.List(fields.Integer, description='Список ID вибраних опцій модифікаторів (якщо є)') 
+})
+
+# Модель для ВІДПОВІДІ 
+order_item_model_output = api.model('OrderItemOutput', {
     'id': fields.Integer(readonly=True, description='ID елемента замовлення'),
-    'dish_id': fields.Integer(required=True, description='ID страви'),
-    'quantity': fields.Integer(required=True, description='Кількість'),
-    'price': fields.Float(description='Ціна на момент замовлення')
+    'dish_id': fields.Integer(description='ID базової страви'),
+    'variant_id': fields.Integer(description='ID вибраного варіанту'), 
+    'quantity': fields.Integer(description='Кількість'),
+    'price': fields.Float(description='Ціна за одиницю товару (з урахуванням варіанту та модифікаторів)'), 
+    # Додамо деталі для кращої відповіді
+    'dish_name': fields.String(attribute='dish.name', description='Назва страви'),
+    'variant_label': fields.String(attribute='variant.size_label', description='Позначення варіанту'),
+    'selected_modifier_options': fields.List(fields.Raw, description='Деталі вибраних модифікаторів') 
 })
 
 order_model = api.model('Order', {
     'id': fields.Integer(readonly=True, description='ID замовлення'),
-    'user_id': fields.Integer(description='ID користувача'),
-    'guest_id': fields.Integer(description='ID гостя'),
+    'user_id': fields.Integer(description='ID користувача (або null)'),
+    'guest_id': fields.Integer(description='ID гостя (або null)'),
     'order_date': fields.DateTime(description='Дата замовлення'),
     'status': fields.String(description='Статус замовлення'),
-    'total_price': fields.Float(description='Загальна сума'),
+    'total_price': fields.Float(description='Загальна сума замовлення'), 
     'delivery_address': fields.String(description='Адреса доставки'),
     'comments': fields.String(description='Коментарі'),
-    'phone_number': fields.String(description='Номер телефону'),
-    'items': fields.List(fields.Nested(order_item_model), description='Елементи замовлення')
+    'phone_number': fields.String(required=False, description='Номер телефону '), 
+    'name': fields.String(description="Ім'я гостя (якщо не зареєстрований)"), # Додамо поле для імені гостя
+    'items': fields.List(fields.Nested(order_item_model_input), required=True, min_items=1, description='Елементи замовлення')
+})
+
+# Модель відповіді для замовлення (використовує модель виводу для item)
+order_model_output = api.model('OrderOutput', {
+    'id': fields.Integer(readonly=True),
+    'user_id': fields.Integer(allow_null=True),
+    'guest_id': fields.Integer(allow_null=True),
+    'order_date': fields.DateTime(),
+    'status': fields.String(),
+    'total_price': fields.Float(),
+    'delivery_address': fields.String(),
+    'comments': fields.String(),
+    'phone_number': fields.String(),
+    'items': fields.List(fields.Nested(order_item_model_output)) 
 })
 
 table_model = api.model('Table', {

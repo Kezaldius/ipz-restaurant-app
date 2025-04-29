@@ -313,25 +313,50 @@ class OrderList(Resource):
 
         total_price = 0
         for item_data in data['items']:
-            dish, status_code = get_object_or_404(Dish, item_data['dish_id'])
+            dish_id = item_data.get('dish_id')
+            variant_id = item_data.get('variant_id')
+            quantity = item_data.get('quantity')
+            modifier_option_ids = item_data.get('modifier_option_ids', [])
+
+            if not dish_id or not variant_id or not quantity:
+                return {'message': 'Кожен item повинен мати dish_id, variant_id і quantity'}, 400
+
+            dish, status_code = get_object_or_404(Dish, dish_id)
             if status_code == 404:
                 return dish, status_code
+
+            variant = DishVariant.query.filter_by(id=variant_id, dish_id=dish.id).first()
+            if not variant:
+                return {'message': f'Варіант страви не знайдено'}, 400
 
             if not dish.is_available:
                 return {'message': f'Страва "{dish.name}" недоступна'}, 400
 
-            if item_data['quantity'] <= 0:
+            if quantity <= 0:
                 return {'message': "Кількість страв має бути більше нуля"}, 400
 
-            order_item = OrderItem(dish=dish, quantity=item_data['quantity'], price=dish.price)
-            order.items.append(order_item)
-            total_price += dish.price * item_data['quantity']
+            # Ціна: базова з варіанту + сума модифікаторів
+            item_price = float(variant.price)
+            order_item = OrderItem(dish=dish, quantity=quantity, variant=variant)
 
+            for mod_id in modifier_option_ids:
+                modifier = ModifierOption.query.get(mod_id)
+                if not modifier:
+                    return {'message': f'Модифікатор з id {mod_id} не знайдено'}, 400
+                order_item_modifier = OrderItemModifier(modifier_option=modifier)
+                order_item.modifiers.append(order_item_modifier)
+                item_price += float(modifier.price_modifier)
+
+            order_item.price = item_price
+            total_price += item_price * quantity
+            order.items.append(order_item)
+        
         order.total_price = total_price
-        db.session.add(order)
 
         try:
+            db.session.add(order)
             db.session.commit()
+            db.session.refresh(order)
             order_schema = OrderSchema()
             return order_schema.dump(order), 201
         except Exception as e:

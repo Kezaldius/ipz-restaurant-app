@@ -38,13 +38,25 @@ class ModifierOptionSchema(SQLAlchemyAutoSchema):
         model = ModifierOption
         load_instance = True
         include_fk = False
-        exclude = ("group", "group_id")
-        
+        exclude = ("group",)
+        fields = ('id', 'name', 'price_modifier', 'is_default', 'group_id')
+
+    price_modifier = fields.Float(as_string=False)
+
+class ModifierOptionSimpleSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = ModifierOption
+        load_instance = True
+        include_fk = True  
+    price_modifier = fields.Float(as_string=False)
+
 class ModifierGroupSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = ModifierGroup
         load_instance = True
         include_fk = False
+        fields = ('id', 'name', 'description', 'is_required', 'selection_type', 'options')
+
         
     options = fields.Nested(ModifierOptionSchema, many=True) 
 class DishVariantSchema(SQLAlchemyAutoSchema):
@@ -52,6 +64,7 @@ class DishVariantSchema(SQLAlchemyAutoSchema):
         model = DishVariant
         load_instance = True
         include_fk = False 
+        fields = ('id', 'dish_id', 'size_label', 'weight_grams', 'volume_ml', 'price', 'is_default')
     price = fields.Float() 
 
 class TagSchema(SQLAlchemyAutoSchema):
@@ -64,6 +77,10 @@ class DishSchema(SQLAlchemyAutoSchema):
         model = Dish
         load_instance = True
         include_relationships = True 
+
+        fields = ('id', 'name', 'description', 'detailed_description', 'image_url',
+                  'category', 'is_available', 'variants', 'tags', 'modifier_groups')
+
     variants = fields.Nested(DishVariantSchema, many=True, required=True)
     tags = fields.Nested(TagSchema, many=True, only=("id", "name")) # Повертаємо ID і name тегу
     modifier_groups = fields.Nested(ModifierGroupSchema, many=True) # Повертаємо повну структуру груп
@@ -74,27 +91,38 @@ class NewsSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
 
+class OrderItemModifierSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = OrderItemModifier
+        load_instance = True
+        include_fk = True
+
+    modifier_option = fields.Nested(ModifierOptionSimpleSchema)
+
 class OrderItemSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = OrderItem
         load_instance = True
         include_fk = True
-        exclude = ('order',)  
-    
-    dish = fields.Nested(DishSchema, only=('id','name', 'price')) # Вкладений об'єкт Dish (тільки id та name)
-    price = fields.Float(dumponly = True) # Тільки для читання
+        exclude = ('order',)
+
+    dish = fields.Nested(DishSchema, only=('id','name'))
+    variant = fields.Nested(DishVariantSchema)
+    modifiers = fields.Nested(OrderItemModifierSchema, many=True)
+    price = fields.Float(dump_only=True)
 
 
 class OrderSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Order
         load_instance = True
-        # include_relationships = True
+        fields = ('id', 'user_id', 'guest_id', 'order_date', 'status', 'total_price',
+                  'delivery_address', 'comments', 'phone_number', 'items', 'user', 'guest')
 
-    items = fields.Nested(OrderItemSchema, many=True)
-    user = fields.Nested('UserSchema', only=('id', 'username', 'email'), dump_only=True)  
+    items = fields.Nested(OrderItemSchema, many=True) # Використовуємо оновлену схему
+    user = fields.Nested('UserSchema', only=('id', 'username', 'email'), dump_only=True)
     guest = fields.Nested('GuestSchema', only=('id', 'phone_number', 'name'), dump_only=True)
-    total_price = fields.Float(dumponly=True) # Тільки для читання
+    total_price = fields.Float(dump_only=True) # Тільки для читання
     order_date = auto_field(dump_only=True)
 
 

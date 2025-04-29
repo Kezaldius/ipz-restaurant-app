@@ -3,6 +3,10 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 
+variant_id = db.Column(db.Integer, db.ForeignKey('dish_variants.id'), nullable=False)
+variant = db.relationship('DishVariant')
+modifiers = db.relationship('OrderItemModifier', backref='order_item', cascade="all, delete-orphan")
+
 dish_tags_table = db.Table('dish_tags', db.Model.metadata,
     db.Column('dish_id', db.Integer, db.ForeignKey('dishes.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tags.id'), primary_key=True)
@@ -90,6 +94,12 @@ class ModifierGroup(db.Model):
     def __repr__(self):
         return f'<ModifierGroup "{self.name}" (ID: {self.id})>'
 
+class OrderItemModifier(db.Model):
+    __tablename__ = 'order_item_modifiers'
+    id = db.Column(db.Integer, primary_key=True)
+    order_item_id = db.Column(db.Integer, db.ForeignKey('order_items.id'), nullable=False)
+    modifier_option_id = db.Column(db.Integer, db.ForeignKey('modifier_options.id'), nullable=False)
+    modifier_option = db.relationship('ModifierOption')
 
 class DishVariant(db.Model):
     __tablename__ = 'dish_variants'
@@ -147,7 +157,6 @@ class News(db.Model):
     def __repr__(self):
         return f'<News {self.name}>'
 
-
 class Order(db.Model):
     __tablename__ = 'orders'
 
@@ -161,7 +170,12 @@ class Order(db.Model):
     comments = db.Column(db.Text) # Коментарі до замовлення
     phone_number = db.Column(db.String(20))
 
-    items = db.relationship('OrderItem', backref='order', lazy='dynamic', cascade="all, delete-orphan")  # Зв'язок з елементами замовлення
+    items = db.relationship(
+    'OrderItem',
+    back_populates='order',
+    cascade='all, delete-orphan',
+    lazy='joined'
+    )
 
     def __repr__(self):
         if self.user_id:
@@ -175,13 +189,23 @@ class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     dish_id = db.Column(db.Integer, db.ForeignKey('dishes.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('dish_variants.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=1)
-    price = db.Column(db.Numeric(10, 2)) # Ціна на момент замовлення
+    price = db.Column(db.Numeric(10, 2))
 
-    dish = db.relationship('Dish') 
+    order = db.relationship('Order', back_populates='items')
+    dish = db.relationship('Dish')
+    variant = db.relationship('DishVariant')
+
+    modifiers = db.relationship(
+        'OrderItemModifier',
+        backref='order_item',
+        cascade="all, delete-orphan",
+        lazy='joined'
+    )
 
     def __repr__(self):
-        return f'<OrderItem {self.quantity}x Dish {self.dish_id} in Order {self.order_id}>'
+        return f'<OrderItem {self.quantity}x Dish {self.dish_id} (Variant {self.variant_id})>'
 
 
 
