@@ -44,14 +44,60 @@ guest_input_model = api.model('GuestInput', {
     'name': fields.String(required=False, description='Ім\'я гостя (необов\'язково)'),
 })
 
+modifier_option_model = api.model('ModifierOption', {
+    'id': fields.Integer(readonly=True, description='ID опції модифікатора'),
+    'name': fields.String(required=True, description='Назва опції (напр., "Мигдальне", "соєвє")'),
+    'price_modifier': fields.Float(required=True, description='Зміна ціни при виборі цієї опції (напр., 5.00, 10.00, 0.00)'),
+    'is_default': fields.Boolean(default=False, description='Чи вибрана ця опція за замовчуванням у групі')
+})
+
+modifier_group_model = api.model('ModifierGroup', {
+    'id': fields.Integer(readonly=True, description='ID групи модифікаторів'),
+    'name': fields.String(required=True, description='Назва групи (напр., "ОБОВ\'ЯЗКОВО вид молока", "Додати сироп?")'),
+    'description': fields.String(description='Додатковий опис групи'),
+    'is_required': fields.Boolean(default=True, description='Чи є вибір у цій групі обов\'язковим'),
+    'selection_type': fields.String(enum=['single', 'multiple'], default='single', description='Тип вибору: один (single) чи декілька (multiple) опцій'),
+    'options': fields.List( # Список опцій всередині групи
+        fields.Nested(modifier_option_model),
+        required=True,
+        min_items=1, # Група має містити хоча б одну опцію
+        description='Список доступних опцій у цій групі'
+    )
+})
+
+
+dish_variant_model = api.model('DishVariant', {
+    'id': fields.Integer(readonly=True, description='ID варіанту (опціонально, для внутрішньої логіки)'),
+    'size_label': fields.String(required=True, description='Текстове позначення розміру/варіанту (напр., "L", "XL", "360г", "700г", "Чорний з лимоном")'),
+    'weight_grams': fields.Integer(description='Вага варіанту в грамах (г)'),
+    'volume_ml': fields.Integer(description='Об\'єм варіанту в мілілітрах (мл)'),
+    'price': fields.Float(required=True, description='Базова (!) ціна цього варіанту страви/напою '),
+    'is_default': fields.Boolean(default=False, description='Чи є цей варіант варіантом за замовчуванням (його ціна буде відображатись в картці)')
+})
+
+
 dish_model = api.model('Dish', {
     'id': fields.Integer(readonly=True, description='ID страви'),
     'name': fields.String(required=True, description='Назва страви'),
     'description': fields.String(description='Опис страви'),
-    'price': fields.Float(required=True, description='Ціна страви'),
+    'detailed_description': fields.String(description = 'Детальний опис страви'),
     'image_url': fields.String(description='URL зображення'),
     'category': fields.String(description='Категорія страви'),
-    'is_available': fields.Boolean(description='Чи доступна страва')
+    'is_available': fields.Boolean(description='Чи доступна страва'),
+    'tags': fields.List(
+        fields.String,
+        description = 'Список тегів/атрибутів (Приклад: spicy,salty,vegeterian,meat,fish,new,lactose)'
+    ),
+    'variants': fields.List(
+        fields.Nested(dish_variant_model),
+        required = True,
+        min_items = 1,
+        description = 'Список доступних варіантів страви (розміри,вага,інгрідієнти,смаки), кожен зі своєю ціною. Вибір є обов\'язковим, якщо їх >1' 
+    ),
+    'modifier_groups': fields.List( #Список груп модифікаторів
+        fields.Nested(modifier_group_model),
+        description='Список груп опцій, які можуть змінювати ціну (напр., вибір молока, топінги).'
+    )
 })
 
 news_model = api.model('News', {
@@ -107,6 +153,7 @@ guests_ns = api.namespace('guests', description='Операції з гостя�
 dishes_ns = api.namespace('dishes', description='Операції зі стравами')
 orders_ns = api.namespace('orders', description='Операції з замовленнями')
 tables_ns = api.namespace('tables', description='Операції зі столиками')
+modifier_groups_ns = api.namespace('modifier-groups', description='Операції з групами модифікаторів')
 reservations_ns = api.namespace('reservations', description='Операції з бронюваннями')
 news_ns = api.namespace('news', description='Операції з новинами')
 

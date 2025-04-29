@@ -101,89 +101,170 @@ class GuestResource(Resource):
 
 @dishes_ns.route('/')
 class DishList(Resource):
+
     @dishes_ns.doc('list_dishes')
-    @dishes_ns.response(200, 'Success', dish_model)
+    # Використовуємо єдину модель API для відповіді
+    @dishes_ns.marshal_list_with(dish_model)
     def get(self):
         """Отримати список усіх страв."""
         dishes = Dish.query.all()
-        dish_schema = DishSchema(many=True)
-        return dish_schema.dump(dishes), 200
+        return dishes 
 
     @dishes_ns.doc('create_dish')
-    @dishes_ns.expect(dish_model, validate=True)
-    @dishes_ns.response(201, 'Dish created', dish_model)
-    @dishes_ns.response(400, 'Validation Error')
+    @dishes_ns.expect(dish_model) 
+    # Повертаємо у форматі єдиної моделі API
+    @dishes_ns.marshal_with(dish_model, code=201)
     def post(self):
         """Створити нову страву."""
-        dish_schema = DishSchema()
         try:
-            new_dish = dish_schema.load(request.get_json(), session=db.session)
+            data = api.payload
 
+            # Витягуємо дані для зв'язків ПЕРЕД створенням об'єкта Dish
+            modifier_groups_input = data.pop('modifier_groups', [])
+            tag_names = data.pop('tags', [])
+            variants_data = data.pop('variants', [])
+
+            # Валідація базових даних
+            if not data.get('name'): api.abort(400, "Поле 'name' є обов'язковим.")
+            if not variants_data: api.abort(400, "Поле 'variants' є обов'язковим.")
+
+            # --- Обробка Modifier Groups ---
+            linked_modifier_groups = []
+            if modifier_groups_input:
+                 group_ids_to_find = []
+                 for group_data in modifier_groups_input:
+                     group_id = group_data.get('id')
+                     if group_id and isinstance(group_id, int): group_ids_to_find.append(group_id)
+                     else: api.abort(400, f"Невірний формат modifier_groups: очікується [{'id': N}].")
+                 if group_ids_to_find:
+                     found_groups = ModifierGroup.query.filter(ModifierGroup.id.in_(group_ids_to_find)).all()
+                     if len(found_groups) != len(set(group_ids_to_find)):
+                          found_ids = {g.id for g in found_groups}; missing_ids = set(group_ids_to_find) - found_ids
+                          api.abort(400, f"Групи модифікаторів з ID {missing_ids} не знайдено.")
+                     linked_modifier_groups = found_groups
+
+            # --- Обробка Tags ---
+            linked_tags = []
+            if tag_names:
+                 for name in tag_names:
+                     if not isinstance(name, str): api.abort(400, f"Теги повинні бути рядками.")
+                     tag = Tag.query.filter_by(name=name).first();
+                     if not tag: tag = Tag(name=name)
+                     linked_tags.append(tag)
+
+            # --- Створення основного об'єкта Dish ---
+            dish_fields = {k: v for k, v in data.items() if hasattr(Dish, k)}
+            new_dish = Dish(**dish_fields)
+
+            # --- Створення та прив'язка Variants ---
+            for variant_data in variants_data:
+                 if not isinstance(variant_data, dict) or not all(k in variant_data for k in ('size_label', 'price')): api.abort(400, "Варіант має містити 'size_label' та 'price'.")
+                 variant_fields = {k: v for k, v in variant_data.items() if hasattr(DishVariant, k)}
+                 variant = DishVariant(**variant_fields)
+                 new_dish.variants.append(variant)
+
+            # --- Прив'язка знайдених груп та тегів ---
+            new_dish.modifier_groups = linked_modifier_groups
+            new_dish.tags = linked_tags
+
+            # --- Збереження ---
             db.session.add(new_dish)
             db.session.commit()
 
-            return dish_schema.dump(new_dish), 201
+            return new_dish, 201
 
-        except ValidationError as e:
-            db.session.rollback()
-            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-        except IntegrityError as e:
-            db.session.rollback()
-            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
-        except Exception as e:
-            db.session.rollback()
-            print(str(e))
-            return {'message': 'Помилка створення страви', 'error': str(e)}, 500
+        except IntegrityError as e: db.session.rollback(); return {'message': 'Помилка цілісності даних.', 'error': str(getattr(e, 'orig', e))}, 400
+        except Exception as e: db.session.rollback(); print(f"Error: {e}"); return {'message': 'Внутрішня помилка сервера.', 'error': str(e)}, 500
+
 
 
 @dishes_ns.route('/<int:dish_id>')
 @dishes_ns.param('dish_id', 'The dish identifier')
 class DishResource(Resource):
     @dishes_ns.doc('get_dish')
-    @dishes_ns.response(200, 'Success', dish_model)
+    # Використовуємо єдину модель API для відповіді
+    @dishes_ns.marshal_with(dish_model)
     @dishes_ns.response(404, 'Dish not found')
     def get(self, dish_id):
         """Отримати страву за ID."""
-        dish, status_code = get_object_or_404(Dish, dish_id)
-        if status_code == 404: return dish, status_code
-        dish_schema = DishSchema()
-        return dish_schema.dump(dish), 200
+        dish = Dish.query.get_or_404(dish_id)
+        return dish
 
     @dishes_ns.doc('update_dish')
-    @dishes_ns.expect(dish_model, validate=True)
-    @dishes_ns.response(200, 'Dish updated', dish_model)
+    @dishes_ns.expect(dish_model) 
+    @dishes_ns.marshal_with(dish_model)
     @dishes_ns.response(400, 'Validation Error')
     @dishes_ns.response(404, 'Dish not found')
     def put(self, dish_id):
         """Оновити страву за ID."""
-        dish, status_code = get_object_or_404(Dish, dish_id)
-        if status_code == 404: return dish, status_code
-
-        dish_schema = DishSchema()
+        dish = Dish.query.get_or_404(dish_id)
         try:
-           data = dish_schema.load(request.get_json(), session=db.session)
-           new_dish = Dish(**data)
-           db.session.add(new_dish)
-           db.session.commit()
-           return dish_schema.dump(new_dish), 200
-        except ValidationError as e:
-             db.session.rollback()
-             return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-        except Exception as e:
-             db.session.rollback()
-             print(str(e))
-             return {'message': 'Помилка створення страви'}, 500
+            data = api.payload
+
+            # Витягуємо дані для зв'язків
+            modifier_groups_input = data.pop('modifier_groups', None)
+            tag_names = data.pop('tags', None)
+            variants_data = data.pop('variants', None)
+
+            # --- Оновлення Modifier Groups (якщо передано) ---
+            if modifier_groups_input is not None:
+                linked_modifier_groups = []
+                if modifier_groups_input:
+                    group_ids_to_find = []
+                    for group_data in modifier_groups_input:
+                         group_id = group_data.get('id');
+                         if group_id and isinstance(group_id, int): group_ids_to_find.append(group_id)
+                         else: api.abort(400, f"Невірний формат modifier_groups.")
+                    if group_ids_to_find:
+                        found_groups = ModifierGroup.query.filter(ModifierGroup.id.in_(group_ids_to_find)).all()
+                        if len(found_groups) != len(set(group_ids_to_find)):
+                             missing_ids = set(group_ids_to_find) - {g.id for g in found_groups}
+                             api.abort(400, f"Групи модифікаторів з ID {missing_ids} не знайдено.")
+                        linked_modifier_groups = found_groups
+                dish.modifier_groups = linked_modifier_groups # Перезаписуємо
+
+            # --- Оновлення Tags (якщо передано) ---
+            if tag_names is not None:
+                 linked_tags = []
+                 for name in tag_names:
+                     if not isinstance(name, str): api.abort(400, f"Теги повинні бути рядками.")
+                     tag = Tag.query.filter_by(name=name).first();
+                     if not tag: tag = Tag(name=name)
+                     linked_tags.append(tag)
+                 dish.tags = linked_tags # Перезаписуємо
+
+            # --- Оновлення Variants (якщо передано) ---
+            if variants_data is not None:
+                 DishVariant.query.filter_by(dish_id=dish.id).delete(); db.session.flush()
+                 if not variants_data: api.abort(400, "Поле 'variants' не може бути порожнім.")
+                 new_variants = []
+                 for variant_data in variants_data:
+                      if not isinstance(variant_data, dict) or not all(k in variant_data for k in ('size_label', 'price')): api.abort(400, "Варіант має містити 'size_label' та 'price'.")
+                      variant_fields = {k: v for k, v in variant_data.items() if hasattr(DishVariant, k)}
+                      variant = DishVariant(**variant_fields)
+                      new_variants.append(variant)
+                 dish.variants = new_variants
+            # --- Оновлення основних полів страви ---
+            for key, value in data.items():
+                if hasattr(dish, key) and key not in ['id', 'variants', 'tags', 'modifier_groups']:
+                    setattr(dish, key, value)
+
+            # --- Збереження ---
+            db.session.commit()
+
+            return dish
+        except IntegrityError as e: db.session.rollback(); return {'message': 'Помилка цілісності даних.', 'error': str(getattr(e, 'orig', e))}, 400
+        except Exception as e: db.session.rollback(); print(f"Error updating dish: {e}"); return {'message': 'Внутрішня помилка сервера.', 'error': str(e)}, 500
 
     @dishes_ns.doc('delete_dish')
     @dishes_ns.response(204, 'Dish deleted')
     @dishes_ns.response(404, 'Dish not found')
     def delete(self, dish_id):
         """Видалити страву за ID."""
-        dish, status_code = get_object_or_404(Dish, dish_id)
-        if status_code == 404: return dish, status_code
+        dish = Dish.query.get_or_404(dish_id)
         db.session.delete(dish)
         db.session.commit()
-        return '', 204  
+        return '', 204
 
 
 @orders_ns.route('/')
@@ -579,8 +660,6 @@ class GuestReservations(Resource):
         reservation_schema = ReservationSchema(many=True)
         return reservation_schema.dump(reservations), 200
     
-
-
 @news_ns.route('')
 class NewsList(Resource):
     @news_ns.doc('list_news')
@@ -675,3 +754,120 @@ class NewsResource(Resource):
         except Exception as e:
             db.session.rollback()
             return {'message':"Помилка при видаленні",  'error': str(e)}, 500
+        
+@modifier_groups_ns.route('/')
+class ModifierGroupList(Resource):
+    @modifier_groups_ns.doc('list_modifier_groups')
+    @modifier_groups_ns.marshal_list_with(modifier_group_model) 
+    def get(self):
+        """Отримати список усіх груп модифікаторів."""
+        groups = ModifierGroup.query.all()
+        return groups
+
+    @modifier_groups_ns.doc('create_modifier_group')
+    @modifier_groups_ns.expect(modifier_group_model, validate=True)
+    @modifier_groups_ns.marshal_with(modifier_group_model, code=201)
+
+    def post(self):
+        """Створити нову групу модифікаторів."""
+        try:
+            data = request.get_json()
+            
+            # Отримуємо дані для створення групи та опцій
+            group_data = {
+                'name': data.get('name'),
+                'description': data.get('description'),
+                'is_required': data.get('is_required', True),
+                'selection_type': data.get('selection_type', 'single')
+            }
+            
+            # Групу створюєм напряму без схеми
+            new_group = ModifierGroup(**group_data)
+            db.session.add(new_group)
+            db.session.flush()  # отримуємо ID групи
+            
+            # Додаємо опції, якщо вони є
+            options_data = data.get('options', [])
+            for option_data in options_data:
+                option = ModifierOption(
+                    group_id=new_group.id,
+                    name=option_data.get('name'),
+                    price_modifier=option_data.get('price_modifier', 0.00),
+                    is_default=option_data.get('is_default', False)
+                )
+                db.session.add(option)
+            
+            db.session.commit()
+            return new_group, 201
+        except ValidationError as e:
+            db.session.rollback()
+            return {'message': 'Помилка валідації даних', 'errors': e.messages}, 400
+        except IntegrityError as e:
+            db.session.rollback()
+            return {'message': 'Помилка цілісності даних (можливо, група з такою назвою вже існує)', 'error': str(getattr(e, 'orig', e))}, 400
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating modifier group: {e}")
+            return {'message': 'Внутрішня помилка сервера при створенні групи', 'error': str(e)}, 500
+
+@modifier_groups_ns.route('/<int:group_id>')
+@modifier_groups_ns.param('group_id', 'The modifier group identifier')
+class ModifierGroupResource(Resource):
+
+    @modifier_groups_ns.doc('get_modifier_group')
+    @modifier_groups_ns.marshal_with(modifier_group_model)
+    @modifier_groups_ns.response(404, 'Modifier Group not found')
+    def get(self, group_id):
+        """Отримати групу модифікаторів за ID."""
+        group = ModifierGroup.query.get_or_404(group_id)
+        return group
+
+    @modifier_groups_ns.doc('update_modifier_group')
+    @modifier_groups_ns.expect(modifier_group_model, validate=True)
+    @modifier_groups_ns.marshal_with(modifier_group_model)
+    @modifier_groups_ns.response(400, 'Validation Error')
+    @modifier_groups_ns.response(404, 'Modifier Group not found')
+    def put(self, group_id):
+        """Оновити групу модифікаторів за ID."""
+        group = ModifierGroup.query.get_or_404(group_id)
+        try:
+            data = request.get_json()
+            
+            # Оновлюємо базові поля групи
+            if 'name' in data:
+                group.name = data['name']
+            if 'description' in data:
+                group.description = data['description']
+            if 'is_required' in data:
+                group.is_required = data['is_required']
+            if 'selection_type' in data:
+                group.selection_type = data['selection_type']
+            
+            # Обробляємо опції, якщо вони передані
+            if 'options' in data:
+                # Видаляємо існуючі опції та створюємо нові
+                ModifierOption.query.filter_by(group_id=group_id).delete()
+                db.session.flush()
+                
+                for option_data in data.get('options', []):
+                    option = ModifierOption(
+                        group_id=group_id,
+                        name=option_data.get('name'),
+                        price_modifier=option_data.get('price_modifier', 0.00),
+                        is_default=option_data.get('is_default', False)
+                    )
+                    db.session.add(option)
+            
+            db.session.commit()
+            return group
+            
+        except ValidationError as e:
+             db.session.rollback()
+             return {'message': 'Помилка валідації', 'errors': e.messages}, 400
+        except IntegrityError as e:
+             db.session.rollback()
+             return {'message': 'Помилка цілісності даних.', 'error': str(getattr(e, 'orig', e))}, 400
+        except Exception as e:
+             db.session.rollback()
+             print(f"Error updating group {group_id}: {e}")
+             return {'message': 'Внутрішня помилка сервера.', 'error': str(e)}, 500

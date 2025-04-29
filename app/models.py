@@ -3,6 +3,18 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 
+dish_tags_table = db.Table('dish_tags', db.Model.metadata,
+    db.Column('dish_id', db.Integer, db.ForeignKey('dishes.id'), primary_key=True),
+    db.Column('tag_id', db.Integer, db.ForeignKey('tags.id'), primary_key=True)
+)
+class Tag(db.Model):
+    __tablename__ = 'tags'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False) # Назва тегу (spicy, meat, etc.)
+
+    def __repr__(self):
+        return f'<Tag {self.name}>'
+
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -42,7 +54,57 @@ class Guest(db.Model):
     def __repr__(self):
         return f'<Guest {self.phone_number}>'
 
+dish_modifier_groups_table = db.Table('dish_modifier_groups', db.Model.metadata,
+    db.Column('dish_id', db.Integer, db.ForeignKey('dishes.id'), primary_key=True),
+    db.Column('modifier_group_id', db.Integer, db.ForeignKey('modifier_groups.id'), primary_key=True)
+)
 
+class ModifierOption(db.Model):
+    __tablename__ = 'modifier_options'
+    id = db.Column(db.Integer, primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('modifier_groups.id'), nullable=False, index=True) # Зв'язок з групою
+    name = db.Column(db.String(100), nullable=False)
+    price_modifier = db.Column(db.Numeric(10, 2), nullable=False, default=0.00) # Зміна ціни
+    is_default = db.Column(db.Boolean, default=False, nullable=False)
+
+    group = db.relationship('ModifierGroup', back_populates='options')
+
+    def __repr__(self):
+        return f'<ModifierOption {self.name} (+{self.price_modifier})>'
+
+class ModifierGroup(db.Model):
+    __tablename__ = 'modifier_groups'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False, unique=True) # Назва групи має бути унікальною для легкого пошуку
+    description = db.Column(db.Text, nullable=True)
+    is_required = db.Column(db.Boolean, default=True, nullable=False) # Чи обов'язковий вибір у стравах де ця група використовується
+    selection_type = db.Column(db.Enum('single', 'multiple', name='selection_type_enum'), default='single', nullable=False)
+
+    options = db.relationship(
+        'ModifierOption',
+        back_populates='group',
+        cascade='all, delete-orphan',
+        lazy='select'
+    )
+
+    def __repr__(self):
+        return f'<ModifierGroup "{self.name}" (ID: {self.id})>'
+
+
+class DishVariant(db.Model):
+    __tablename__ = 'dish_variants'
+    id = db.Column(db.Integer, primary_key=True)
+    dish_id = db.Column(db.Integer, db.ForeignKey('dishes.id'), nullable=False) 
+    size_label = db.Column(db.String(100), nullable=False) # Текстове позначення (L, XL, 360г, чорний чай)
+    weight_grams = db.Column(db.Integer, nullable=True) # Вага (опціонально)
+    volume_ml = db.Column(db.Integer, nullable=True) # Об'єм (опціонально)
+    price = db.Column(db.Numeric(10, 2), nullable=False) #Ціна тепер тут
+    is_default = db.Column(db.Boolean, default=False, nullable=False) # Чи це варіант за замовчуванням
+
+    dish = db.relationship('Dish', back_populates='variants')
+
+    def __repr__(self):
+        return f'<DishVariant {self.size_label} for Dish ID {self.dish_id}>'
 
 class Dish(db.Model):
     __tablename__ = 'dishes'
@@ -50,13 +112,27 @@ class Dish(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    price = db.Column(db.Numeric(10, 2), nullable=False)  # Ціна 
+    detailed_description = db.Column(db.Text)
     image_url = db.Column(db.String(255))  # URL зображення
     category = db.Column(db.String(50))  # Категорія страви (наприклад, "Кофе", "Десерти")
     is_available = db.Column(db.Boolean, default=True)  # Чи доступна страва зараз
 
+    variants = db.relationship(
+        'DishVariant', back_populates='dish', cascade='all, delete-orphan', lazy='select'
+    )
+    tags = db.relationship(
+        'Tag', secondary=dish_tags_table, backref=db.backref('dishes', lazy='dynamic'), lazy='select'
+    )
+    modifier_groups = db.relationship( #Зв'язок Many-to-Many
+        'ModifierGroup',
+        secondary=dish_modifier_groups_table, 
+        backref=db.backref('dishes_associated', lazy='dynamic'), 
+        lazy='select' # Або 'joined', якщо групи часто потрібні разом зі стравою
+    )
+    
     def __repr__(self):
         return f'<Dish {self.name}>'
+    
     
 
 class News(db.Model):

@@ -1,5 +1,5 @@
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
-from app.models import User, Dish, Order, OrderItem, Table, Reservation, Guest, News
+from app.models import *
 from marshmallow import fields, ValidationError, validates, Schema
 
 class UserSchema(SQLAlchemyAutoSchema):
@@ -32,14 +32,41 @@ class GuestSchema(SQLAlchemyAutoSchema):
     def validate_username(self, value):
        if User.query.filter_by(username=value).first():
            raise ValidationError('Це ім\'я користувача вже зайняте.')
+       
+class ModifierOptionSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = ModifierOption
+        load_instance = True
+        include_fk = False
+        exclude = ("group", "group_id")
+        
+class ModifierGroupSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = ModifierGroup
+        load_instance = True
+        include_fk = False
+        
+    options = fields.Nested(ModifierOptionSchema, many=True) 
+class DishVariantSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = DishVariant
+        load_instance = True
+        include_fk = False 
+    price = fields.Float() 
+
+class TagSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = Tag
+        load_instance = True
 
 class DishSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Dish
         load_instance = True
-        include_fk = True
-        
-    price = fields.Float()
+        include_relationships = True 
+    variants = fields.Nested(DishVariantSchema, many=True, required=True)
+    tags = fields.Nested(TagSchema, many=True, only=("id", "name")) # Повертаємо ID і name тегу
+    modifier_groups = fields.Nested(ModifierGroupSchema, many=True) # Повертаємо повну структуру груп
 
 class NewsSchema(SQLAlchemyAutoSchema):
     class Meta:
