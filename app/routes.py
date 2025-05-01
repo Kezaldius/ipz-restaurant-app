@@ -19,9 +19,9 @@ def get_object_or_404(model, id):
 @users_ns.route('/register')
 class UserRegistration(Resource):
     @users_ns.doc('create_new_user')
-    @users_ns.expect(registration_model, validate=True, description="Дані для створення юзера. Поле `name` є необов'язковим.")
+    @users_ns.expect(registration_model, validate=True)
     @users_ns.response(201, 'User created successfully', user_model)
-    @users_ns.response(400, 'Validation Error')
+    @users_ns.response(400, 'Validation Error or Phone number already exists')
     @users_ns.response(500, 'Internal Server Error')
     def post(self):
         """Реєстрація нового користувача."""
@@ -33,14 +33,17 @@ class UserRegistration(Resource):
 
         if 'password' in request.get_json():
             new_user.set_password(request.get_json()['password'])
+        else:
+            return {'message': 'Пароль є обов\'язковим '}, 400 # Може щось змінювати буду нехай тут буде
+        
         db.session.add(new_user)
 
         try:
             db.session.commit()
             return user_schema.dump(new_user), 201
-        except IntegrityError:
+        except IntegrityError as e:
             db.session.rollback()
-            return {'message': 'Помилка при створенні користувача'}, 500
+            return {'message': 'Помилка при створенні користувача', 'error': str(e)}, 500
 
 
 @users_ns.route('/login')
@@ -48,17 +51,19 @@ class UserLogin(Resource):
     @users_ns.doc('user_login')
     @users_ns.expect(user_model, validate=True)  
     @users_ns.response(200, 'Login successful')
+    @users_ns.response(400, 'Bad Request')
     @users_ns.response(401, 'Invalid credentials')
     def post(self):
         """Вхід користувача."""
         data = request.get_json()
-        username = data.get('username')
+        phone_number = data.get('phone_number')
         password = data.get('password')
 
-        if not username or not password:
-            return {'message': 'Username and password are required'}, 400
+        if not phone_number or not password:
+            return {'message': 'Номер телефону та пароль є обов\'язковими'}, 400
 
-        user = User.query.filter_by(username=username).first()
+        user = User.query.filter_by(phone_number=phone_number).first()
+
         if user and user.check_password(password):
             return {'message': 'Успішний вхід', 'user_id': user.id}, 200
         else:

@@ -6,10 +6,25 @@ class UserSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = User
         load_instance = True  # Створювати об'єкт моделі при десеріалізації
-        exclude = ('password_hash',)  # Виключаємо password_hash з виводу
         include_relationships = False
         include_fk = False
+        fields = ('id', 'phone_number', 'first_name', 'last_name', 'is_admin', 'password') # Певно ще й is_admin треба прибрати, але він поки не заважає
+        load_only = ('password',)
+        
+    phone_number = auto_field(required=True)
     password = fields.String(load_only=True, required=True) # Отримуємо пароль, но не видаємо його в JSON
+
+    @validates('phone_number')
+    def validate_phone_number(self, value):
+        if not value:
+            raise ValidationError('Номер телефону є обов\'язковим.')
+        # Мейбі додати складнішу перевірку по типу регіонального номеру
+        if len(value) < 10: # Проста перевірка довжини
+             raise ValidationError('Номер телефону має містити мінімум 10 символів')
+
+        if User.query.filter_by(phone_number=value).first():
+            raise ValidationError('Цей номер телефону вже зареєстрований.')
+
     
 class GuestSchema(SQLAlchemyAutoSchema):
     class Meta:
@@ -20,18 +35,8 @@ class GuestSchema(SQLAlchemyAutoSchema):
     @validates('phone_number')
     def validate_phone_number(self, value):
         if not value or len(value) < 10:
-            raise ValidationError('Номер телефону має містити мінімум 10 символів')
+            raise ValidationError('Номер телефону має містити менше 10 символів')
 
-    #Процес валідації даних
-    @validates('email')
-    def validate_email(self, value):
-        if User.query.filter_by(email=value).first():
-            raise ValidationError('Цей email вже використовується.')
-            
-    @validates('username')
-    def validate_username(self, value):
-       if User.query.filter_by(username=value).first():
-           raise ValidationError('Це ім\'я користувача вже зайняте.')
        
 class ModifierOptionSchema(SQLAlchemyAutoSchema):
     class Meta:
@@ -119,8 +124,8 @@ class OrderSchema(SQLAlchemyAutoSchema):
         fields = ('id', 'user_id', 'guest_id', 'order_date', 'status', 'total_price',
                   'delivery_address', 'comments', 'phone_number', 'items', 'user', 'guest')
 
-    items = fields.Nested(OrderItemSchema, many=True) # Використовуємо оновлену схему
-    user = fields.Nested('UserSchema', only=('id', 'username', 'email'), dump_only=True)
+    items = fields.Nested(OrderItemSchema, many=True) 
+    user = fields.Nested('UserSchema', only=('id', 'phone_number', 'first_name', 'last_name'), dump_only=True)
     guest = fields.Nested('GuestSchema', only=('id', 'phone_number', 'name'), dump_only=True)
     total_price = fields.Float(dump_only=True) # Тільки для читання
     order_date = auto_field(dump_only=True)
@@ -137,7 +142,7 @@ class ReservationSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
         
-    user = fields.Nested('UserSchema', only=('id', 'username', 'email'), dump_only=True)
+    user = fields.Nested('UserSchema', only=('id', 'phone_number', 'first_name', 'last_name'), dump_only=True)
     guest = fields.Nested('GuestSchema', only=('id', 'phone_number', 'name'), dump_only=True)
     table = fields.Nested('TableSchema', only=('id', 'table_number'))
     reservation_date = fields.DateTime(format='%Y-%m-%d %H:%M:%S')

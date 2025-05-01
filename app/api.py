@@ -13,22 +13,22 @@ api = Api(api_bp,
 #Моделі для Swagger
 user_model = api.model('User', {
     'id': fields.Integer(readonly=True, description='ID користувача'),
-    'username': fields.String(required=True, description='Ім\'я користувача'),
-    'email': fields.String(required=True, description='Email користувача'),
+    'phone_number': fields.String(required=True, description='Номер телефону'),
     'first_name': fields.String(description='Ім\'я'),
     'last_name': fields.String(description='Прізвище'),
-    'phone_number': fields.String(description='Номер телефону'),
     'is_admin': fields.Boolean(description='Чи є користувач адміністратором')
 })
 
 registration_model = api.model('UserRegistration', {
-    'username': fields.String(required=True, description='Ім\'я користувача'),
-    'email': fields.String(required=True, description='Email користувача'),
+    'phone_number': fields.String(required=True, description='Номер телефону'),
     'password': fields.String(required=True, description='Пароль'), 
     'first_name': fields.String(description='Ім\'я'),
-    'last_name': fields.String(description='Прізвище'),
-    'phone_number': fields.String(description='Номер телефону'),
-    'is_admin': fields.Boolean(description='Чи є користувач адміністратором')
+    'last_name': fields.String(description='Прізвище') # Видалив isadmin при регістрації, поки взагалі його не використовуємо
+})
+
+login_model = api.model('UserLogin' , {
+    'phone_number': fields.String(required=True, description='Номер телефону для входу'),
+    'password': fields.String(required=True, description='Пароль для входу')
 })
 
 

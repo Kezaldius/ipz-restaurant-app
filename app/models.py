@@ -23,12 +23,12 @@ class User(db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=False, nullable=True)
+    email = db.Column(db.String(120), unique=False, nullable=True)
     password_hash = db.Column(db.String(128), nullable=False)
     first_name = db.Column(db.String(80))
     last_name = db.Column(db.String(80))
-    phone_number = db.Column(db.String(20))
+    phone_number = db.Column(db.String(20), unique = True, nullable = False)
     is_admin = db.Column(db.Boolean, default=False)  # Потенційне адмін меню
 
     orders = db.relationship('Order', backref='user', lazy='dynamic')
@@ -40,7 +40,7 @@ class User(db.Model):
         return check_password_hash(self.password_hash, password)
 
     def __repr__(self):
-        return f'<User {self.username}>'
+        return f'<User {self.phone_number}>'
 
 class Guest(db.Model):
     __tablename__ = 'guests'
@@ -143,7 +143,6 @@ class Dish(db.Model):
     def __repr__(self):
         return f'<Dish {self.name}>'
     
-    
 
 class News(db.Model):
     __tablename__ = 'news'
@@ -206,8 +205,6 @@ class OrderItem(db.Model):
 
     def __repr__(self):
         return f'<OrderItem {self.quantity}x Dish {self.dish_id} (Variant {self.variant_id})>'
-
-
 
 class Table(db.Model):
     __tablename__ = 'tables'
