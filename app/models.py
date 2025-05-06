@@ -79,9 +79,9 @@ class ModifierOption(db.Model):
 class ModifierGroup(db.Model):
     __tablename__ = 'modifier_groups'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(150), nullable=False, unique=True) # Назва групи має бути унікальною для легкого пошуку
+    name = db.Column(db.String(150), nullable=False, unique=True) 
     description = db.Column(db.Text, nullable=True)
-    is_required = db.Column(db.Boolean, default=True, nullable=False) # Чи обов'язковий вибір у стравах де ця група використовується
+    is_required = db.Column(db.Boolean, default=True, nullable=False) 
     selection_type = db.Column(db.Enum('single', 'multiple', name='selection_type_enum'), default='single', nullable=False)
 
     options = db.relationship(
@@ -108,7 +108,7 @@ class DishVariant(db.Model):
     size_label = db.Column(db.String(100), nullable=False) # Текстове позначення (L, XL, 360г, чорний чай)
     weight_grams = db.Column(db.Integer, nullable=True) # Вага (опціонально)
     volume_ml = db.Column(db.Integer, nullable=True) # Об'єм (опціонально)
-    price = db.Column(db.Numeric(10, 2), nullable=False) #Ціна тепер тут
+    price = db.Column(db.Numeric(10, 2), nullable=False) 
     is_default = db.Column(db.Boolean, default=False, nullable=False) # Чи це варіант за замовчуванням
 
     dish = db.relationship('Dish', back_populates='variants')
@@ -133,11 +133,11 @@ class Dish(db.Model):
     tags = db.relationship(
         'Tag', secondary=dish_tags_table, backref=db.backref('dishes', lazy='dynamic'), lazy='select'
     )
-    modifier_groups = db.relationship( #Зв'язок Many-to-Many
+    modifier_groups = db.relationship( 
         'ModifierGroup',
         secondary=dish_modifier_groups_table, 
         backref=db.backref('dishes_associated', lazy='dynamic'), 
-        lazy='select' # Або 'joined', якщо групи часто потрібні разом зі стравою
+        lazy='select' 
     )
     
     def __repr__(self):
@@ -146,7 +146,7 @@ class Dish(db.Model):
 
 class News(db.Model):
     __tablename__ = 'news'
-
+    # Мабуть додати новинам перевірку на дату і якщо дата більше за потрібну вони самі вимикаються
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
@@ -208,7 +208,7 @@ class OrderItem(db.Model):
 
 class Table(db.Model):
     __tablename__ = 'tables'
-
+    # Столикам взагалі треба змінити логіку, займусь цим потім. (Або додати метод який буде виступати в ролі календаря?)
     id = db.Column(db.Integer, primary_key=True)
     table_number = db.Column(db.Integer, unique=True, nullable=False)
     capacity = db.Column(db.Integer, nullable=False)  # Кількість місць на столік

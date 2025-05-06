@@ -30,8 +30,10 @@ login_model = api.model('UserLogin' , {
     'phone_number': fields.String(required=True, description='Номер телефону для входу'),
     'password': fields.String(required=True, description='Пароль для входу')
 })
-
-
+reset_password_by_phone = api.model('ResetPasswordByPhone', {
+    'phone_number': fields.String(required=True, description='Номер телефону користувача'),
+    'new_password': fields.String(required=True, min_length=6, description='Новий пароль ')
+}) # Ця модель - плейсхолдер. При проді я (або інший бекенд розробник) реалізуємо зміну пароля через СМСку
 guest_model = api.model('Guest', {
     'id': fields.Integer(readonly=True, description='ID гостя'),
     'phone_number': fields.String(required=True, description='Номер телефону'),
@@ -123,7 +125,6 @@ order_item_model_output = api.model('OrderItemOutput', {
     'variant_id': fields.Integer(description='ID вибраного варіанту'), 
     'quantity': fields.Integer(description='Кількість'),
     'price': fields.Float(description='Ціна за одиницю товару (з урахуванням варіанту та модифікаторів)'), 
-    # Додамо деталі для кращої відповіді
     'dish_name': fields.String(attribute='dish.name', description='Назва страви'),
     'variant_label': fields.String(attribute='variant.size_label', description='Позначення варіанту'),
     'selected_modifier_options': fields.List(fields.Raw, description='Деталі вибраних модифікаторів') 
@@ -139,7 +140,7 @@ order_model = api.model('Order', {
     'delivery_address': fields.String(description='Адреса доставки'),
     'comments': fields.String(description='Коментарі'),
     'phone_number': fields.String(required=False, description='Номер телефону '), 
-    'name': fields.String(description="Ім'я гостя (якщо не зареєстрований)"), # Додамо поле для імені гостя
+    'name': fields.String(description="Ім'я гостя (якщо не зареєстрований)"), 
     'items': fields.List(fields.Nested(order_item_model_input), required=True, min_items=1, description='Елементи замовлення')
 })
 

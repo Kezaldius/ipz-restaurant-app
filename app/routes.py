@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify,current_app
 from flask_restx import Resource  
 from app import db, api 
 from app.api import *
@@ -67,7 +67,7 @@ class UserLogin(Resource):
         if user and user.check_password(password):
             return {'message': 'Успішний вхід', 'user_id': user.id}, 200
         else:
-            return {'message': 'Невірне ім\'я користувача або пароль'}, 401
+            return {'message': 'Неправильний номер телефону або пароль'}, 401
 
 @users_ns.route('/<int:user_id>')
 @users_ns.param('user_id', 'The user identifier')
@@ -82,6 +82,45 @@ class UserResource(Resource):
             return user, status_code 
         return user, 200 
     
+@users_ns.route('/reset-password-by-phone') 
+class UserResetPasswordByPhone(Resource):
+    @users_ns.doc('reset_user_password_by_phone_',
+                  description="""**Плейсхолдер** 
+                  Цей ендпоінт дозволяє скинути пароль, знаючи лише номер телефону. 
+                  """
+    )
+    @users_ns.expect(reset_password_by_phone, validate=True) 
+    @users_ns.response(200, 'Пароль успішно змінено.')
+    @users_ns.response(400, 'Невірні дані: номер телефону та новий пароль є обов\'язковими.')
+    @users_ns.response(404, 'Користувача з таким номером телефону не знайдено.')
+    @users_ns.response(500, 'Внутрішня помилка сервера при спробі змінити пароль.')
+    def post(self):
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        new_password = data.get('new_password')
+
+        if not phone_number or not new_password:
+            return {'message': 'Номер телефону та новий пароль є обов\'язковими.'}, 400
+        user = User.query.filter_by(phone_number=phone_number).first()
+
+        if not user:
+            return {'message': 'Користувача з таким номером телефону не знайдено.'}, 404
+
+        # Якщо будемо додавати вимоги до пароля, треба не забути й тут додати
+        user.set_password(new_password) 
+
+        try:
+            db.session.commit()
+            return {'message': 'Пароль успішно змінено.'}, 200
+        except IntegrityError as e:
+            db.session.rollback()
+            current_app.logger.error(f"Помилка цілісності при зміни пароля для {phone_number}: {str(e)}")
+            return {'message': 'Помилка цілісності даних під час зміни пароля.'}, 500
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Загальна помилка скидання пароля для {phone_number}: {str(e)}")
+            return {'message': 'Внутрішня помилка сервера при спробі змінити пароль.'}, 500
+
 
 @guests_ns.route('/')
 class GuestResource(Resource):
