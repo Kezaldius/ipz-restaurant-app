@@ -8,6 +8,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError, OperationalError
 from marshmallow import ValidationError
+from twilio.rest import Client
+import re
+import random
+import string
 
 def get_object_or_404(model, id):
     obj = model.query.get(id)
@@ -81,46 +85,126 @@ class UserResource(Resource):
         if status_code == 404:
             return user, status_code 
         return user, 200 
-    
-@users_ns.route('/reset-password-by-phone') 
-class UserResetPasswordByPhone(Resource):
-    @users_ns.doc('reset_user_password_by_phone_',
-                  description="""**Плейсхолдер** 
-                  Цей ендпоінт дозволяє скинути пароль, знаючи лише номер телефону. 
-                  """
-    )
-    @users_ns.expect(reset_password_by_phone, validate=True) 
-    @users_ns.response(200, 'Пароль успішно змінено.')
-    @users_ns.response(400, 'Невірні дані: номер телефону та новий пароль є обов\'язковими.')
+
+@users_ns.route('/passwordreset') 
+class RequestPasswordReset(Resource):
+    @users_ns.doc('request_password_reset')
+    @users_ns.expect(request_otp_model, validate=True)
+    @users_ns.response(200, 'OTP успішно надіслано.')
+    @users_ns.response(400, 'Невірний запит або помилка відправки OTP.')
     @users_ns.response(404, 'Користувача з таким номером телефону не знайдено.')
-    @users_ns.response(500, 'Внутрішня помилка сервера при спробі змінити пароль.')
+    @users_ns.response(500, 'Помилка на сервері Twilio')
     def post(self):
+        """Запит на відправку OTP для скидання пароля."""
         data = request.get_json()
         phone_number = data.get('phone_number')
-        new_password = data.get('new_password')
 
-        if not phone_number or not new_password:
-            return {'message': 'Номер телефону та новий пароль є обов\'язковими.'}, 400
+        if not phone_number:
+            return {'message': 'Номер телефону є обов\'язковим.'}, 400
+        
         user = User.query.filter_by(phone_number=phone_number).first()
-
         if not user:
             return {'message': 'Користувача з таким номером телефону не знайдено.'}, 404
 
-        # Якщо будемо додавати вимоги до пароля, треба не забути й тут додати
-        user.set_password(new_password) 
+        def normalize_number(number: str) -> str:
+            cleaned = re.sub(r"[^\d+]", "", number)
+            if re.fullmatch(r"0\d{9}", cleaned): # Якщо номер починається з 0 і має довжину в 10 цифр то додаємо код країни
+                cleaned = "+380" + cleaned[1:]
+            elif re.fullmatch(r"380\d{9}", cleaned): # Додаємо + якщо '380...'
+                cleaned = "+" + cleaned
+            return cleaned
+        
+        normalized_phonenumber = normalize_number(phone_number)
+        
+        def generate_otp(length=6):
+            return "".join(random.choices(string.digits, k=length))
+        
+        otp_code = generate_otp()
+        otp_expiration_seconds = current_app.config.get('OTP_EXPIRATION_SECONDS', 1800)
+
+        PasswordResetOTP.query.filter_by(phone_number=phone_number, used=False).delete() # Видаляємо старі OTP при генерації нових 
+        db.session.commit()
+
+        new_otp_entry = PasswordResetOTP(
+            phone_number=phone_number,
+            otp_code=otp_code,
+            expires_in_seconds=otp_expiration_seconds
+        )
+        db.session.add(new_otp_entry)
+        db.session.commit()
+
+
+        account_sid = current_app.config.get('TWILIO_ACCOUNT_SID')
+        auth_token = current_app.config.get('TWILIO_AUTH_TOKEN')
+
+        if not all([account_sid, auth_token, normalized_phonenumber]):
+            current_app.logger.error("Twilio credentials не налаштовані.")
+            return {'message': 'Помилка конфігурації сервісу.'}, 500
+        
+        client = Client(account_sid, auth_token)
+        message_body = f"Ваш код для скидання пароля: {otp_code}."
+        
+        try:
+            message = client.messages.create(
+                body=message_body,
+                from_='+16183238656',
+                to=normalized_phonenumber
+            )
+        except Exception as e:
+            current_app.logger.error(f"Загальна помилка при відправці SMS для {phone_number}: {e}")
+            return {'message': 'Внутрішня помилка сервера.'}, 500
+
+@users_ns.route('/otpverify')
+class VerifyOTPAndResetPassword(Resource):
+    @users_ns.doc('verify_otp_and_reset_password')
+    @users_ns.expect(verify_otp_and_reset_password_model, validate=True)
+    @users_ns.response(200, 'Пароль успішно змінено.')
+    @users_ns.response(400, 'Невірні вхідні дані - не всі поля заповнені.')
+    @users_ns.response(401, 'Невірний або прострочений OTP-код.')
+    @users_ns.response(404, 'Користувача з таким номером телефону не знайдено.')
+    @users_ns.response(500, 'Внутрішня помилка сервера при спробі змінити пароль.')
+    def post(self):
+        """Запит на верифікацію OTP для скидання пароля."""
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        provided_otp = data.get('otp_code')
+        new_password = data.get('new_password')
+
+        if not phone_number or not provided_otp or not new_password:
+            return {'message': 'Номер телефону, OTP-код та новий пароль є обов\'язковими.'}, 400
+        
+        user = User.query.filter_by(phone_number=phone_number).first()
+        if not user:
+            current_app.logger.info(f"Спроба верифікації OTP для неіснуючого користувача: {phone_number}")
+            return {'message': 'Користувача з таким номером телефону не знайдено.'}, 404
+        
+        otp_entry = PasswordResetOTP.query.filter_by(
+            phone_number=phone_number,
+            used=False
+        ).order_by(PasswordResetOTP.created_at.desc()).first() # Беремо найостанніший пароль. Це важливо, якщо користувач міг кілька разів запитувати OTP
+
+        if not otp_entry:
+            current_app.logger.warning(f"Не знайдено активного OTP для {phone_number} при спробі верифікації.")
+            return {'message': 'Для цього номеру телефону не було запитано OTP, або він вже використаний/прострочений.'}, 401
+        
+        if not otp_entry.is_valid(provided_otp):
+            current_app.logger.warning(f"Невдала спроба верифікації OTP для {phone_number}. Надано: {provided_otp}, Очікувалось: {otp_entry.otp_code if otp_entry else 'N/A'}")
+            # Якщо треба буде то можу зробити тут логіку таймаута після декількох невдалих спроб
+            return {'message': 'Невірний або прострочений OTP-код.'}, 401
+        
+        user.set_password(new_password)
+        otp_entry.mark_as_used() # Встановлюємо пароль та ставимо otp як використаний
 
         try:
-            db.session.commit()
+            db.session.add(user) # Це для ясності зроблено, приберу за непотребою якщо багів не буде
+            db.session.add(otp_entry) 
+            db.session.commit() 
+            current_app.logger.info(f"Пароль для користувача {phone_number} успішно змінено.")
             return {'message': 'Пароль успішно змінено.'}, 200
-        except IntegrityError as e:
-            db.session.rollback()
-            current_app.logger.error(f"Помилка цілісності при зміни пароля для {phone_number}: {str(e)}")
-            return {'message': 'Помилка цілісності даних під час зміни пароля.'}, 500
         except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Загальна помилка скидання пароля для {phone_number}: {str(e)}")
-            return {'message': 'Внутрішня помилка сервера при спробі змінити пароль.'}, 500
-
+            db.session.rollback() 
+            current_app.logger.error(f"Помилка бази даних при зміні пароля для {phone_number} після валідації OTP: {str(e)}")
+            return {'message': 'Внутрішня помилка сервера при спробі оновити пароль.'}, 500
 
 @guests_ns.route('/')
 class GuestResource(Resource):
@@ -154,7 +238,6 @@ class GuestResource(Resource):
         except Exception as e:
             db.session.rollback()
             return {'message': 'Помилка при обробці запиту', 'error': str(e)}, 500
-
 
 @dishes_ns.route('/')
 class DishList(Resource):
@@ -232,8 +315,6 @@ class DishList(Resource):
 
         except IntegrityError as e: db.session.rollback(); return {'message': 'Помилка цілісності даних.', 'error': str(getattr(e, 'orig', e))}, 400
         except Exception as e: db.session.rollback(); print(f"Error: {e}"); return {'message': 'Внутрішня помилка сервера.', 'error': str(e)}, 500
-
-
 
 @dishes_ns.route('/<int:dish_id>')
 @dishes_ns.param('dish_id', 'The dish identifier')

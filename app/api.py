@@ -30,10 +30,15 @@ login_model = api.model('UserLogin' , {
     'phone_number': fields.String(required=True, description='Номер телефону для входу'),
     'password': fields.String(required=True, description='Пароль для входу')
 })
-reset_password_by_phone = api.model('ResetPasswordByPhone', {
-    'phone_number': fields.String(required=True, description='Номер телефону користувача'),
-    'new_password': fields.String(required=True, min_length=6, description='Новий пароль ')
-}) # Ця модель - плейсхолдер. При проді я (або інший бекенд розробник) реалізуємо зміну пароля через СМСку
+verify_otp_and_reset_password_model = api.model('VerifyOTPAndResetPassword', {
+    'phone_number': fields.String(required=True, description='Номер телефону користувача (E.164)'),
+    'otp_code': fields.String(required=True, description='OTP-код, отриманий через SMS'),
+    'new_password': fields.String(required=True, description='Новий пароль')
+})
+request_otp_model = api.model('RequestPasswordResetOTP', {
+    'phone_number': fields.String(required=True, description='Номер телефону користувача (у форматі E.164, по типу +380991234567)')
+})
+
 guest_model = api.model('Guest', {
     'id': fields.Integer(readonly=True, description='ID гостя'),
     'phone_number': fields.String(required=True, description='Номер телефону'),

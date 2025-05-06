@@ -1,5 +1,5 @@
 from app import db
-from datetime import datetime
+from datetime import datetime, timezone,timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 
@@ -11,6 +11,35 @@ dish_tags_table = db.Table('dish_tags', db.Model.metadata,
     db.Column('dish_id', db.Integer, db.ForeignKey('dishes.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tags.id'), primary_key=True)
 )
+class PasswordResetOTP(db.Model):
+    __tablename__ = 'password_reset_otps'
+
+    id = db.Column(db.Integer, primary_key=True)
+    phone_number = db.Column(db.String(20), nullable=False, index=True)
+    otp_code = db.Column(db.String(10), nullable=False) 
+    created_at = db.Column(db.DateTime(timezone = True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime(timezone = True), nullable=False)
+    used = db.Column(db.Boolean, default=False, nullable=False)
+
+    def __init__(self, phone_number, otp_code, expires_in_seconds):
+        self.phone_number = phone_number
+        self.otp_code = otp_code
+        now_utc = datetime.now(timezone.utc)
+        self.created_at = now_utc
+        self.expires_at = now_utc + timedelta(seconds=expires_in_seconds)
+
+    def is_valid(self, provided_otp):
+        now_utc = datetime.now(timezone.utc)
+        if self.expires_at.tzinfo is None:
+            expires_at = self.expires_at.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = self.expires_at
+            
+        return not self.used and expires_at > now_utc and self.otp_code == provided_otp
+
+    def mark_as_used(self):
+        self.used = True
+
 class Tag(db.Model):
     __tablename__ = 'tags'
     id = db.Column(db.Integer, primary_key=True)

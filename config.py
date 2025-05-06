@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'default-key-for-dev'
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+    OTP_EXPIRATION_SECONDS = 1800 # Час життя OTP у секундах. Для тестів використаємо 30 хвилин. 
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     RESTFUL_JSON = {'ensure_ascii': False,  'separators': (', ', ': '), 'indent': 2, 'sort_keys':True,
