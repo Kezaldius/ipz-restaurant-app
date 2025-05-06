@@ -69,6 +69,19 @@ class UserLogin(Resource):
         else:
             return {'message': 'Невірне ім\'я користувача або пароль'}, 401
 
+@users_ns.route('/<int:user_id>')
+@users_ns.param('user_id', 'The user identifier')
+class UserResource(Resource):
+    @users_ns.doc('get_user_details')
+    @users_ns.marshal_with(user_model) 
+    @users_ns.response(404, 'User not found')
+    def get(self, user_id):
+        """Отримати детальну інформацію про користувача за ID."""
+        user, status_code = get_object_or_404(User, user_id)
+        if status_code == 404:
+            return user, status_code 
+        return user, 200 
+    
 
 @guests_ns.route('/')
 class GuestResource(Resource):
