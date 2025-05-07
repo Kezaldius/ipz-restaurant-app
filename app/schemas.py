@@ -108,7 +108,9 @@ class OrderItemModifierSchema(SQLAlchemyAutoSchema):
 class OrderItemSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = OrderItem
+        sqla_session = db.session
         load_instance = True
+        include_relationships = True
         include_fk = True
         exclude = ('order',)
 
