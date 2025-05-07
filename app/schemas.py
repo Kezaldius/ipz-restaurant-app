@@ -112,11 +112,11 @@ class OrderItemSchema(SQLAlchemyAutoSchema):
         include_fk = True
         exclude = ('order',)
 
+    dish_id = auto_field()
     dish = fields.Nested(DishSchema, only=('id','name'))
     variant = fields.Nested(DishVariantSchema)
     modifiers = fields.Nested(OrderItemModifierSchema, many=True)
     price = fields.Float(dump_only=True)
-
 
 class OrderSchema(SQLAlchemyAutoSchema):
     class Meta:
