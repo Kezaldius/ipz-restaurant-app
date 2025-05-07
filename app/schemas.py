@@ -1,6 +1,7 @@
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
 from app.models import *
 from marshmallow import fields, ValidationError, validates, Schema
+from app import db
 
 class UserSchema(SQLAlchemyAutoSchema):
     class Meta:
@@ -120,9 +121,12 @@ class OrderItemSchema(SQLAlchemyAutoSchema):
 class OrderSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Order
+        sqla_session = db.session
         load_instance = True
+        include_relationships = True
+        include_fk = True
         fields = ('id', 'user_id', 'guest_id', 'order_date', 'status', 'total_price',
-                  'delivery_address', 'comments', 'phone_number', 'items', 'user', 'guest')
+                 'delivery_address', 'comments', 'phone_number', 'items', 'user', 'guest')
 
     items = fields.Nested(OrderItemSchema, many=True) 
     user = fields.Nested('UserSchema', only=('id', 'phone_number', 'first_name', 'last_name'), dump_only=True)
