@@ -206,6 +206,51 @@ class VerifyOTPAndResetPassword(Resource):
             current_app.logger.error(f"Помилка бази даних при зміні пароля для {phone_number} після валідації OTP: {str(e)}")
             return {'message': 'Внутрішня помилка сервера при спробі оновити пароль.'}, 500
 
+@users_ns.route('/passwordresetclassic')
+class ResetPasswordClassic(Resource):
+    @users_ns.doc('reset_password')
+    @users_ns.expect(reset_password_model, validate=True)
+    @users_ns.response(200, 'Пароль успішно змінено.')
+    @users_ns.response(400, 'Невірні вхідні дані - не всі поля правильно заповнені.')
+    @users_ns.response(404, 'Користувача з таким номером телефону не знайдено.')
+    @users_ns.response(500, 'Внутрішня помилка сервера при спробі змінити пароль.')
+
+    def post(self):
+        """Запит на скидання пароля класичним методом"""
+        data = request.get_json()
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        phone_number = data.get('phone_number')
+        old_password = data.get('old_password')
+        old_password_input = data.get('old_password')
+        new_password = data.get('new_password')
+        new_password_repeat = data.get('new_password_repeat')
+
+        if not all([first_name,last_name,phone_number,old_password,new_password,new_password]):
+            return {'message': 'Номер телефону, прізвище, ім\'я, поточний пароль та новий пароль з повтором є обов\'язковими.'}, 400
+        user = User.query.filter_by(phone_number=phone_number).first()
+        if not user:
+            return {'message': 'Користувача з таким номером телефону не знайдено.'}, 404
+    
+        if new_password != new_password_repeat:
+            return {'message': 'Введені паролі не збігаються. Будь ласка, переконайтеся, що обидва паролі однакові.'}, 400
+        
+        if not user.check_password(old_password_input):
+            current_app.logger.warning(f"Невдала спроба зміни пароля для {phone_number}: невірний старий пароль.")
+            return {'message': 'Невірний поточний пароль.'}, 401
+        
+        user.set_password(new_password)
+
+        try:
+            db.session.add(user) # Це для ясності зроблено, приберу за непотребою якщо багів не буде
+            db.session.commit() 
+            current_app.logger.info(f"Пароль для користувача {phone_number} успішно змінено.")
+            return {'message': 'Пароль успішно змінено.'}, 200
+        except Exception as e:
+            db.session.rollback() 
+            current_app.logger.error(f"Помилка бази даних при зміні пароля для {phone_number}: {str(e)}")
+            return {'message': 'Внутрішня помилка сервера при спробі оновити пароль.'}, 500
+        
 @guests_ns.route('/')
 class GuestResource(Resource):
     @guests_ns.doc('create_or_get_guest')

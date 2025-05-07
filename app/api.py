@@ -35,6 +35,15 @@ verify_otp_and_reset_password_model = api.model('VerifyOTPAndResetPassword', {
     'otp_code': fields.String(required=True, description='OTP-код, отриманий через SMS'),
     'new_password': fields.String(required=True, description='Новий пароль')
 })
+reset_password_model = api.model('VerifyOTPAndResetPassword', {
+    'first_name': fields.String(required=True, description='Ім\'я'),
+    'last_name': fields.String(required=True, description='Прізвище'),
+    'phone_number': fields.String(required=True, description='Номер телефону користувача (E.164)'),
+    'old_password': fields.String(required=True, description='Старий пароль'),
+    'new_password': fields.String(required=True, description='Новий пароль'),
+    'new_password_repeat': fields.String(required=True, description='Підтвердження нового паролю')
+}) # Взагалі не зовсім зрозумів навіщо в зміні пароля ПІ, але Максим сказав значить хай буде
+
 request_otp_model = api.model('RequestPasswordResetOTP', {
     'phone_number': fields.String(required=True, description='Номер телефону користувача (у форматі E.164, по типу +380991234567)')
 })
