@@ -10,3 +10,4 @@ SQLAlchemy==2.0.39
 flask-restx>=1.0.3
 flask-cors>=5.0.0
 twilio>=9.6.0
+gunicorn>=23.0.0
