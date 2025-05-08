@@ -46,7 +46,9 @@ class Tag(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False) # Назва тегу (spicy, meat, etc.)
 
     def __repr__(self):
-        return f'<Tag {self.name}>'
+        return self.name
+    def __str__(self):
+        return self.name
 
 class User(db.Model):
     __tablename__ = 'users'
