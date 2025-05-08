@@ -14,6 +14,9 @@ class Config:
         'pool_pre_ping': True # Пінгуємо БД перед з'єднанням
     }
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    RESTAURANT_OPENING_HOUR = 10
+    RESTAURANT_CLOSING_HOUR = 23 # Час роботи ресторана (Взагалі я його взяв з початку та закінчення слотів на бронювання, але він ні для чого іншого й непотрібен)
+    RESERVATION_SLOT_DURATION_HOURS = 1 # Час бронювання одного слота (столика)
     RESTFUL_JSON = {'ensure_ascii': False,  'separators': (', ', ': '), 'indent': 2, 'sort_keys':True,
                     'default': lambda o: float(o) if isinstance(o, decimal.Decimal) else o
                     }

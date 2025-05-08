@@ -237,6 +237,7 @@ class OrderItem(db.Model):
 class Table(db.Model):
     __tablename__ = 'tables'
     # Столикам взагалі треба змінити логіку, займусь цим потім. (Або додати метод який буде виступати в ролі календаря?)
+
     id = db.Column(db.Integer, primary_key=True)
     table_number = db.Column(db.Integer, unique=True, nullable=False)
     capacity = db.Column(db.Integer, nullable=False)  # Кількість місць на столік
@@ -247,6 +248,7 @@ class Table(db.Model):
     def __repr__(self):
         return f'<Table {self.table_number}>'
 
+
 class Reservation(db.Model):
     __tablename__ = 'reservations'
 
@@ -254,11 +256,15 @@ class Reservation(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     guest_id = db.Column(db.Integer, db.ForeignKey('guests.id'), nullable=True)
     table_id = db.Column(db.Integer, db.ForeignKey('tables.id'), nullable=False)
+
+    reservation_start_time = db.Column(db.DateTime, nullable=False, index=True)
+    reservation_end_time = db.Column(db.DateTime, nullable=False, index=True) 
+
     reservation_date = db.Column(db.DateTime, nullable=False)
     guest_count = db.Column(db.Integer, nullable=False)
     comments = db.Column(db.Text)
     status = db.Column(db.String, default='Підтверджено')
-    phone_number = db.Column(db.String(20), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True) #Ця строка потрібна щоб гость міг подати запит на цей рут лише з номером телефона та отримати свій гостьовий профіль
 
     user = db.relationship('User')
 
@@ -267,3 +273,5 @@ class Reservation(db.Model):
             return f'<Reservation for Table {self.table_id} by User {self.user_id} on {self.reservation_date}>'
         else:
             return f'<Reservation for Table {self.table_id} by Guest {self.guest_id} on {self.reservation_date}>'
+        
+

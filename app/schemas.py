@@ -142,14 +142,36 @@ class TableSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Table
         load_instance = True
+        fields = ('id', 'table_number', 'capacity', 'is_available') 
 
 class ReservationSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = Reservation
         load_instance = True
         include_fk = True
-        
+        fields = (
+            'id', 'user_id', 'guest_id', 'table_id',
+            'reservation_start_time', 'reservation_end_time', 
+            'guest_count', 'comments', 'status', 'phone_number',
+            'user', 'guest', 'table' 
+        )
+    
     user = fields.Nested('UserSchema', only=('id', 'phone_number', 'first_name', 'last_name'), dump_only=True)
     guest = fields.Nested('GuestSchema', only=('id', 'phone_number', 'name'), dump_only=True)
-    table = fields.Nested('TableSchema', only=('id', 'table_number'))
-    reservation_date = fields.DateTime(format='%Y-%m-%d %H:%M:%S')
+    table = fields.Nested('TableSchema', only=('id', 'table_number', 'capacity'))
+
+    reservation_start_time = fields.DateTime(format='%Y-%m-%d %H:%M:%S')
+    reservation_end_time = fields.DateTime(format='%Y-%m-%d %H:%M:%S')
+
+class ReservationCreateSchema(Schema):
+    date_str = fields.Date(format='%Y-%m-%d', required=True, data_key="date")
+    time_slot_start_str = fields.Time(format='%H:%M', required=True, data_key="slot_start")
+
+    table_id = fields.Integer(required=True)
+    guest_count = fields.Integer(required=True)
+
+    user_id = fields.Integer(required=False, allow_none=True)
+    phone_number = fields.String(required=False, allow_none=True)
+    name = fields.String(required=False, allow_none=True) 
+    comments = fields.String(required=False, allow_none=True)
+

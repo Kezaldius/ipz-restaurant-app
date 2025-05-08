@@ -1,11 +1,12 @@
 from flask import request, jsonify,current_app
-from flask_restx import Resource  
+from flask_restx import Resource,  reqparse, fields 
 from app import db, api 
 from app.api import *
 from app.models import *
 from app.schemas import *
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from werkzeug.exceptions import NotFound, BadRequest
+from datetime import datetime, timedelta, date as py_date, time as py_time
 from sqlalchemy.exc import IntegrityError, OperationalError
 from marshmallow import ValidationError
 from twilio.rest import Client
@@ -19,6 +20,14 @@ def get_object_or_404(model, id):
         return {'message': f'{model.__name__} not found'}, 404
     return obj, 200
 
+slots_availability_parser = reqparse.RequestParser()
+slots_availability_parser.add_argument('date', type=str, required=True, help='Дата у форматі YYYY-MM-DD', location='args')
+slots_availability_parser.add_argument('guest_count', type=int, required=False, help='Кількість гостей', location='args')
+
+tables_availability_parser = reqparse.RequestParser()
+tables_availability_parser.add_argument('date', type=str, required=True, help='Дата у форматі YYYY-MM-DD', location='args')
+tables_availability_parser.add_argument('slot_start', type=str, required=True, help='Час початку слоту у форматі HH:MM', location='args')
+tables_availability_parser.add_argument('guest_count', type=int, required=False, help='Кількість гостей', location='args')
 
 @users_ns.route('/register')
 class UserRegistration(Resource):
@@ -718,122 +727,306 @@ class TableResource(Resource):
 
 @reservations_ns.route('/')
 class ReservationList(Resource):
-    @reservations_ns.doc('create_reservation')
-    @reservations_ns.expect(reservation_model, validate=True)
-    @reservations_ns.response(201, 'Reservation created', reservation_model)
-    @reservations_ns.response(400, 'Bad Request')
+
+
+    @reservations_ns.doc('list_reservations', description='Отримати список усіх бронювань')
+    @reservations_ns.marshal_list_with(reservation_model)
+    def get(self):
+        """Отримати всі бронювання""" 
+        reservations = Reservation.query.all()
+        return reservations, 200
+    
+    @reservations_ns.doc('create_reservation') 
+    @reservations_ns.expect(reservation_input_model) 
+    @reservations_ns.marshal_with(reservation_model, code=201) 
     def post(self):
         """Створити нове бронювання."""
+        json_data = request.get_json()
+        reservation_create_schema = ReservationCreateSchema()
+
         try:
-            data = request.get_json()
+            data = reservation_create_schema.load(json_data)
+        except ValidationError as e:
+            reservations_ns.abort(400, message="Помилка валідації вхідних даних.", errors=e.messages)
 
-            if not data or 'table_id' not in data or 'reservation_date' not in data or 'guest_count' not in data:
-                return {'message': 'Не вказані обов\'язкові поля'}, 400
+        requested_date_obj = data['date_str'] 
+        slot_start_time_obj = data['time_slot_start_str']
+        table_id = data['table_id']
+        guest_count_val = data['guest_count']
+        user_id_val = data.get('user_id')
+        phone_number_val = data.get('phone_number')
+        guest_name_val = data.get('name')
+        comments_val = data.get('comments')
 
-            user_id = data.get('user_id')
-            phone_number = data.get('phone_number')
+        slot_duration_hours = current_app.config.get('RESERVATION_SLOT_DURATION_HOURS', 1)
+        reservation_start_dt = datetime.combine(requested_date_obj, slot_start_time_obj)
+        reservation_end_dt = reservation_start_dt + timedelta(hours=slot_duration_hours)
 
-            if not user_id and not phone_number:
-                return {'message': "Потрібно вказати user_id або phone_number"}, 400
+        opening_hour = current_app.config.get('RESTAURANT_OPENING_HOUR', 10)
+        if reservation_end_dt.time().hour < reservation_start_dt.time().hour and reservation_end_dt.time().hour < opening_hour :
+             pass
+        table = Table.query.get(table_id)
 
-            table, status_code = get_object_or_404(Table, data['table_id'])
-            if status_code == 404:
-                return table, status_code
+        if not table:
+            raise NotFound(f"Столик з ID {table_id} не знайдено.")
+        
+        if not table.is_available: 
+            reservations_ns.abort(400, message=f"Столик {table.table_number} тимчасово недоступний.")
 
-            guest_id = None
-            if phone_number:
-                guest = Guest.query.filter_by(phone_number=phone_number).first()
-                if not guest:
-                    guest = Guest(phone_number=phone_number, name=data.get('name', ''))
-                    db.session.add(guest)
-                    db.session.flush()
-                guest_id = guest.id
+        if table.capacity < guest_count_val:
+            reservations_ns.abort(400, message=f"Столик {table.table_number} вміщує максимум {table.capacity} гостей.")
 
-            elif user_id:
-                user, status_code = get_object_or_404(User, user_id)
-                if status_code == 404:
-                    return user, status_code
+        conflicting = Reservation.query.filter(
+            Reservation.table_id == table_id,
+            Reservation.status == 'Підтверджено',
+            Reservation.reservation_start_time < reservation_end_dt,
+            Reservation.reservation_end_time > reservation_start_dt
+        ).first()
 
-            new_reservation = Reservation(
-                user_id=user_id,
-                guest_id=guest_id,
-                table_id=data['table_id'],
-                reservation_date=datetime.strptime(data['reservation_date'], '%Y-%m-%d %H:%M:%S'),
-                guest_count=data['guest_count'],
-                comments=data.get('comments'),
-                status=data.get('status', 'Підтверджено'),
-                phone_number=phone_number or (user.phone_number if user_id else None)
-            )
+        if conflicting:
+            reservations_ns.abort(409, message=f"Cтолик {table.table_number} вже зайнятий на цей час. Будь ласка, оберіть інший час або столик.")
+        
+        final_user_id = None
+        final_guest_id = None
+        actual_phone_number = None
 
+        if user_id_val:
+            user = User.query.get(user_id_val)
+            if not user:
+                raise NotFound(f"Користувача з ID {user_id_val} не знайдено.")
+            final_user_id = user.id
+            actual_phone_number = user.phone_number
+        elif phone_number_val:
+            actual_phone_number = phone_number_val
+            guest = Guest.query.filter_by(phone_number=phone_number_val).first()
+            if not guest:
+                guest = Guest(phone_number=phone_number_val, name=guest_name_val or f"Гість {phone_number_val}")
+                db.session.add(guest)
+                try:
+                    db.session.flush() 
+                except IntegrityError: 
+                    db.session.rollback()
+                    guest = Guest.query.filter_by(phone_number=phone_number_val).first()
+                    if not guest: # Дуже малоймовірно, але менше дебажити треба буде
+                         reservations_ns.abort(500, "Помилка при створенні/пошуку гостя.")
+            final_guest_id = guest.id
+        else:
+            reservations_ns.abort(400, message="Необхідно вказати user_id або phone_number для бронювання.")
+        
+        new_reservation = Reservation(
+            user_id=final_user_id,
+            guest_id=final_guest_id,
+            table_id=table_id,
+            reservation_start_time=reservation_start_dt,
+            reservation_end_time=reservation_end_dt,
+            reservation_date = requested_date_obj,
+            guest_count=guest_count_val,
+            comments=comments_val,
+            phone_number=actual_phone_number,
+            status='Підтверджено' 
+        )
+
+        try:
             db.session.add(new_reservation)
             db.session.commit()
-
-            reservation_schema = ReservationSchema()
-            return reservation_schema.dump(new_reservation), 201
-
-        except ValidationError as e:
-            return {'message': 'Помилка валідації', 'errors': e.messages}, 400
-        except IntegrityError as e:
+            return new_reservation, 201 
+        except IntegrityError as err: 
             db.session.rollback()
-            return {'message': 'Помилка цілісності даних', 'error': str(e)}, 400
-        except Exception as e:
+            current_app.logger.error(f"Помилка IntegrityError при створенні бронювання: {err}")
+            reservations_ns.abort(500, "Помилка бази даних при збереженні бронювання.")
+        except Exception as e: 
             db.session.rollback()
-            return {'message': 'Помилка створення бронювання', 'error': str(e)}, 500
+            current_app.logger.error(f"Загальна помилка при створенні бронювання: {e}")
+            reservations_ns.abort(500, "Не вдалося створити бронювання.")
+
+@reservations_ns.route('/available-slots')
+class AvailableSlots(Resource):
+    @reservations_ns.expect(slots_availability_parser)
+    @reservations_ns.marshal_with(date_slots_availability_response_model)
+
     def get(self):
-        """Отримати всі бронювання"""
-        reservations = Reservation.query.all()  # Отримуємо всі бронювання
-        reservation_schema = ReservationSchema(many=True)
-        return reservation_schema.dump(reservations), 200
+        """Отримати список доступних часових слотів на обрану дату.
+        Щоб правильно використовувати цей рут формат команди - /api/reservations/available-slots?date=2025-05-09&guest_count=2"""
+        args = slots_availability_parser.parse_args()
+        try:
+            requested_date = datetime.strptime(args['date'], '%Y-%m-%d').date()
+        except ValueError:
+            reservations_ns.abort(400, "Невірний формат дати. Очікується YYYY-MM-DD.")
+        
+        guest_count = args.get('guest_count')
 
+        opening_hour = current_app.config.get('RESTAURANT_OPENING_HOUR', 10)
+        closing_hour = current_app.config.get('RESTAURANT_CLOSING_HOUR', 23)
+        slot_duration_hours = current_app.config.get('RESERVATION_SLOT_DURATION_HOURS', 1)
+
+        available_time_slots = []
+        current_hour = opening_hour
+
+        while current_hour < closing_hour:
+            slot_start_time = py_time(current_hour, 0)
+            # Розрахунок часу кінця слота
+            end_hour_candidate = current_hour + slot_duration_hours
+            slot_end_time = py_time(min(end_hour_candidate, closing_hour), 0)
+            # Якщо тривалість слота робить його початок рівним або більшим за кінець (напр. closing_hour 22:30), пропускаємо
+            if datetime.combine(py_date.min, slot_start_time) >= datetime.combine(py_date.min, slot_end_time) and slot_duration_hours > 0:
+                current_hour += slot_duration_hours
+                continue
+
+            slot_start_dt = datetime.combine(requested_date, slot_start_time)
+            slot_end_dt = datetime.combine(requested_date, slot_end_time)
+
+            # Якщо slot_end_dt виходить на наступний день через closing_hour
+            if slot_end_time.hour < slot_start_time.hour and slot_end_time.hour < opening_hour : 
+                 slot_end_dt = datetime.combine(requested_date + timedelta(days=1), slot_end_time)
+
+            query_tables = Table.query.filter(Table.is_available == True) # Перевірка на Table.is_available
+            if guest_count and guest_count > 0:
+                query_tables = query_tables.filter(Table.capacity >= guest_count)
+            
+            potential_tables = query_tables.all()
+            is_any_table_available_in_slot = False
+
+            if not potential_tables:
+                is_any_table_available_in_slot = False
+            else:
+                for table in potential_tables:
+                    conflicting_reservations = Reservation.query.filter(
+                        Reservation.table_id == table.id,
+                        Reservation.status == 'Підтверджено',
+                        Reservation.reservation_start_time < slot_end_dt,
+                        Reservation.reservation_end_time > slot_start_dt
+                    ).count()
+
+                    if conflicting_reservations == 0:
+                        is_any_table_available_in_slot = True
+                        break 
+            available_time_slots.append({
+                "slot_start": slot_start_time.strftime('%H:%M'), # Форматування для схеми
+                "slot_end": slot_end_time.strftime('%H:%M'),   # Тут теж
+                "is_available_for_booking": is_any_table_available_in_slot
+            })
+            current_hour += slot_duration_hours
+            
+        return {"date": requested_date.strftime('%Y-%m-%d'), "slots": available_time_slots}
+
+@reservations_ns.route('/available-tables')
+class AvailableTablesForSlot(Resource):
+    @reservations_ns.expect(tables_availability_parser)
+    @reservations_ns.marshal_list_with(table_slot_availability_model)
+    def get(self):
+        """Отримати список доступних столиків на обрану дату та часовий слот.
+        Щоб правильно використовувати цей рут формат команди - /api/reservations/available-tables?date=2025-05-09&slot_start=20:00.
+        Це стандартний формат, також можно додати guest_count = int s і буде /available-tables?date=2025-05-09&slot_start=20:00&guest_count=4"""
+        args = tables_availability_parser.parse_args()
+        try:
+            requested_date = datetime.strptime(args['date'], '%Y-%m-%d').date()
+            slot_start_time = datetime.strptime(args['slot_start'], '%H:%M').time()
+        except ValueError:
+            reservations_ns.abort(400, "Невірний формат дати або часу. Очікується YYYY-MM-DD та HH:MM.")
+
+        guest_count = args.get('guest_count')
+        slot_duration_hours = current_app.config.get('RESERVATION_SLOT_DURATION_HOURS', 1)
+        requested_start_dt = datetime.combine(requested_date, slot_start_time)
+        requested_end_dt = requested_start_dt + timedelta(hours=slot_duration_hours)
+
+        # Якщо кінець слоту переходить на наступний день
+        opening_hour = current_app.config.get('RESTAURANT_OPENING_HOUR', 10)
+        if requested_end_dt.time().hour < requested_start_dt.time().hour and requested_end_dt.time().hour < opening_hour:
+            pass
+        all_tables = Table.query.all()
+        result_tables_availability = []
+
+        for table in all_tables:
+            table_info = {
+                "table_id": table.id,
+                "table_number": table.table_number,
+                "capacity": table.capacity,
+                "is_available": True,
+                "reason_code": None,
+                "reason_message": None
+            }
+
+            # Перевірка, чи столик взагалі доступний 
+            if not table.is_available:
+                table_info["is_available"] = False
+                table_info["reason_code"] = "TABLE_UNAVAILABLE"
+                table_info["reason_message"] = "Столик тимчасово недоступний"
+                result_tables_availability.append(table_info)
+                continue
+
+            # Перевірка вмістимості
+            if guest_count and guest_count > 0 and table.capacity < guest_count:
+                table_info["is_available"] = False
+                table_info["reason_code"] = "NOT_ENOUGH_CAPACITY"
+                table_info["reason_message"] = "Недостатньо місць"
+                result_tables_availability.append(table_info)
+                continue
+
+            # Перевірка наявності конфліктуючих бронювань
+
+            conflicting_reservations = Reservation.query.filter(
+                Reservation.table_id == table.id,
+                Reservation.status == 'Підтверджено',
+                Reservation.reservation_start_time < requested_end_dt,
+                Reservation.reservation_end_time > requested_start_dt
+            )
+
+            conflicting_reservations_list = conflicting_reservations.all()
+
+            if conflicting_reservations_list:
+                    current_app.logger.info(f"ЗНАЙДЕНО КОНФЛІКТ(И) для столика {table.id}:")
+                    for res in conflicting_reservations_list:
+                       current_app.logger.info(f"  - ID бронювання: {res.id}, Статус: {res.status}, Час: {res.reservation_start_time} - {res.reservation_end_time}")
+                    table_info["is_available"] = False
+                    table_info["reason_code"] = "BOOKED_IN_SLOT"
+                    table_info["reason_message"] = "Заброньовано на цей час"
+            else:
+                  current_app.logger.info(f"Конфліктів для столика {table.id} НЕ знайдено в інтервалі {requested_start_dt} - {requested_end_dt}.")
+
+            result_tables_availability.append(table_info)
+
+        return result_tables_availability
 
 @reservations_ns.route('/<int:reservation_id>')
 @reservations_ns.param('reservation_id', 'The reservation identifier')
 class ReservationResource(Resource):
-    @reservations_ns.doc('get_reservation')
-    @reservations_ns.response(200, 'Success', reservation_model)
-    @reservations_ns.response(404, 'Reservation not found')
+    @reservations_ns.marshal_with(reservation_model)
     def get(self, reservation_id):
         """Отримати бронювання за ID."""
         reservation, status_code = get_object_or_404(Reservation, reservation_id)
-        if status_code == 404: return reservation, status_code
-
-        reservation_schema = ReservationSchema()
-        return reservation_schema.dump(reservation), 200
-
-    @reservations_ns.doc('update_reservation')
-    @reservations_ns.expect(reservation_model, validate=True)
-    @reservations_ns.response(200, 'Reservation updated', reservation_model)
-    @reservations_ns.response(400, 'Validation Error')
-    @reservations_ns.response(404, 'Reservation not found')
+        if status_code == 404: 
+            reservation = Reservation.query.get_or_404(reservation_id, description=f"Бронювання з ID {reservation_id} не знайдено")
+        return reservation
+    
+    @reservations_ns.expect(reservation_input_model) 
+    @reservations_ns.marshal_with(reservation_model)
     def put(self, reservation_id):
         """Оновити бронювання за ID."""
-        reservation, status_code = get_object_or_404(Reservation, reservation_id)
-        if status_code == 404: return reservation, status_code
-
-
-        reservation_schema = ReservationSchema()
+        reservation = Reservation.query.get_or_404(reservation_id, description=f"Бронювання з ID {reservation_id} не знайдено")
+        json_data = request.get_json()
+        reservation_update_schema = ReservationCreateSchema(partial=True) # Дозволяємо часткове оновлення 
         try:
-           updated_reservation = reservation_schema.load(request.get_json(), instance=reservation, partial=True, session = db.session)
-           db.session.commit()
-           return reservation_schema.dump(updated_reservation), 200
-        except ValidationError as e:
-            return {'message':'Помилка валідації', 'errors':e.messages}, 400
+            data_to_update = reservation_update_schema.load(json_data)
+        except ValidationError as err:
+            reservations_ns.abort(400, message="Помилка валідації даних для оновлення.", errors=err.messages)
+
+        allowed_to_update_simple = ['comments', 'status', 'phone_number'] # Можно змінити лише ці поля, якщо змінювати інші то треба додати повну перевірку доступності
+        # Взагалі легше повністю видалити бронювання і створити нове, ніж додавати ту логіку
+        needs_revalidation = False 
+        if 'guest_count' in data_to_update:
+            if data_to_update['guest_count'] > reservation.table.capacity:
+                reservations_ns.abort(400, f"Нова кількість гостей ({data_to_update['guest_count']}) перевищує місткість столика ({reservation.table.capacity}).")
+            reservation.guest_count = data_to_update['guest_count']
+        for key, value in data_to_update.items():
+            if key in allowed_to_update_simple:
+                setattr(reservation, key, value)
+        try:
+            db.session.commit()
+            return reservation
         except Exception as e:
             db.session.rollback()
-            return {'message':str(e)}, 500
-
-
-    @reservations_ns.doc('delete_reservation')
-    @reservations_ns.response(204, 'Reservation deleted')
-    @reservations_ns.response(404, 'Reservation not found')
-    def delete(self, reservation_id):
-        """Видалити бронювання за ID."""
-        reservation, status_code = get_object_or_404(Reservation, reservation_id)
-        if status_code == 404: return reservation, status_code
-
-        db.session.delete(reservation)
-        db.session.commit()
-        return '', 204
+            current_app.logger.error(f"Помилка при оновленні бронювання {reservation_id}: {e}")
+            reservations_ns.abort(500, "Не вдалося оновити бронювання.")
 
 
 @users_ns.route('/<int:user_id>/reservations')
