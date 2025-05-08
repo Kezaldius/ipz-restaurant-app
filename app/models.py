@@ -172,7 +172,6 @@ class Dish(db.Model):
     def __repr__(self):
         return f'<Dish {self.name}>'
     
-
 class News(db.Model):
     __tablename__ = 'news'
     # Мабуть додати новинам перевірку на дату і якщо дата більше за потрібну вони самі вимикаються

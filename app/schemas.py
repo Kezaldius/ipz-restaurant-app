@@ -69,8 +69,9 @@ class DishVariantSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = DishVariant
         load_instance = True
-        include_fk = False 
+        include_fk = True 
         fields = ('id', 'dish_id', 'size_label', 'weight_grams', 'volume_ml', 'price', 'is_default')
+    dish_id = auto_field()
     price = fields.Float() 
 
 class TagSchema(SQLAlchemyAutoSchema):
