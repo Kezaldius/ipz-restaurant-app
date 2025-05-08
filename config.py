@@ -10,6 +10,9 @@ class Config:
     OTP_EXPIRATION_SECONDS = 1800 # Час життя OTP у секундах. Для тестів використаємо 30 хвилин. 
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    RESTAURANT_OPENING_HOUR = 10
+    RESTAURANT_CLOSING_HOUR = 23 # Час роботи ресторана (Взагалі я його взяв з початку та закінчення слотів на бронювання, але він ні для чого іншого й непотрібен)
+    RESERVATION_SLOT_DURATION_HOURS = 1 # Час бронювання одного слота (столика)
     RESTFUL_JSON = {'ensure_ascii': False,  'separators': (', ', ': '), 'indent': 2, 'sort_keys':True,
                     'default': lambda o: float(o) if isinstance(o, decimal.Decimal) else o
                     }

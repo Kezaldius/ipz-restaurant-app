@@ -9,7 +9,6 @@ api = Api(api_bp,
           description='API для ресторанної системи',
           doc='/docs')
 
-
 #Моделі для Swagger
 user_model = api.model('User', {
     'id': fields.Integer(readonly=True, description='ID користувача'),
@@ -181,16 +180,51 @@ table_model = api.model('Table', {
 
 reservation_model = api.model('Reservation', {
     'id': fields.Integer(readonly=True, description='ID бронювання'),
-    'user_id': fields.Integer(description='ID користувача'),
-    'guest_id': fields.Integer(description='ID гостя'),
+    'user_id': fields.Integer(description='ID користувача', allow_null=True),
+    'guest_id': fields.Integer(description='ID гостя', allow_null=True),
     'table_id': fields.Integer(required=True, description='ID столика'),
-    'reservation_date': fields.DateTime(required=True, description='Дата бронювання'),
+    'reservation_start_time': fields.DateTime(required=True, description='Дата та час початку бронювання', dt_format='iso8601'), 
+    'reservation_end_time': fields.DateTime(required=True, description='Дата та час закінчення бронювання', dt_format='iso8601'), 
     'guest_count': fields.Integer(required=True, description='Кількість гостей'),
     'comments': fields.String(description='Коментарі'),
     'status': fields.String(description='Статус бронювання'),
-    'phone_number': fields.String(description='Номер телефону')
+    'phone_number': fields.String(description='Номер телефону'),
+
+    'user': fields.Nested(user_model, description='Деталі користувача', allow_null=True, skip_none=True),
+    'guest': fields.Nested(guest_model, description='Деталі гостя', allow_null=True, skip_none=True),
+    'table': fields.Nested(table_model, description='Деталі столика', required=True)
 })
 
+reservation_input_model = api.model('ReservationInput', {
+    'date': fields.String(required=True, description='Дата бронювання у форматі YYYY-MM-DD', example='2024-12-31'),
+    'slot_start': fields.String(required=True, description='Час початку слоту у форматі HH:MM', example='14:00'),
+    'table_id': fields.Integer(required=True, description='ID столика'),
+    'guest_count': fields.Integer(required=True, description='Кількість гостей'),
+    'user_id': fields.Integer(description='ID користувача (якщо зареєстрований)'),
+    'phone_number': fields.String(description='Номер телефону (якщо гість або новий користувач)'),
+    'name': fields.String(description="Ім'я гостя (якщо не зареєстрований)"),
+    'comments': fields.String(description='Коментарі до бронювання')
+})
+
+time_slot_availability_model = api.model('TimeSlotAvailability', {
+    'slot_start': fields.String(description='Час початку слоту HH:MM'),
+    'slot_end': fields.String(description='Час кінця слоту HH:MM'),
+    'is_available_for_booking': fields.Boolean(description='Чи доступний слот для бронювання')
+})
+
+date_slots_availability_response_model = api.model('DateSlotsAvailabilityResponse', {
+    'date': fields.String(description='Дата у форматі YYYY-MM-DD'),
+    'slots': fields.List(fields.Nested(time_slot_availability_model))
+})
+
+table_slot_availability_model = api.model('TableSlotAvailability', {
+    'table_id': fields.Integer(),
+    'table_number': fields.Integer(),
+    'capacity': fields.Integer(),
+    'is_available': fields.Boolean(),
+    'reason_code': fields.String(allow_null=True),
+    'reason_message': fields.String(allow_null=True)
+})
 
 users_ns = api.namespace('users', description='Операції з користувачами')
 guests_ns = api.namespace('guests', description='Операції з гостями')
