@@ -101,6 +101,7 @@ class UserResource(Resource):
     @users_ns.response(404, 'Користувача не знайдено')
     @users_ns.response(400, 'Помилка валідації')
     def patch(self, user_id):
+        """Оновити інформацію про користувача за ID."""
         user_obj = User.query.get(user_id)
         if not user_obj:
             users_ns.abort(404, f"Користувача з ID {user_id} не знайдено.")

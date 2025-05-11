@@ -40,7 +40,7 @@ verify_otp_and_reset_password_model = api.model('VerifyOTPAndResetPassword', {
     'otp_code': fields.String(required=True, description='OTP-код, отриманий через SMS'),
     'new_password': fields.String(required=True, description='Новий пароль')
 })
-reset_password_model = api.model('VerifyOTPAndResetPassword', {
+reset_password_model = api.model('ResetPassword', {
     'first_name': fields.String(required=True, description='Ім\'я'),
     'last_name': fields.String(required=True, description='Прізвище'),
     'phone_number': fields.String(required=True, description='Номер телефону користувача (E.164)'),
