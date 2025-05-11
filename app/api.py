@@ -18,6 +18,12 @@ user_model = api.model('User', {
     'is_admin': fields.Boolean(description='Чи є користувач адміністратором')
 })
 
+user_patch_model = api.model('UserPatch', {
+    'phone_number': fields.String(required=False, description='Номер телефону'),
+    'first_name': fields.String(required=False, description='Ім\'я'),
+    'last_name': fields.String(required=False, description='Прізвище')
+})
+
 registration_model = api.model('UserRegistration', {
     'phone_number': fields.String(required=True, description='Номер телефону'),
     'password': fields.String(required=True, description='Пароль'), 

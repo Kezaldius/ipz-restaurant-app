@@ -87,13 +87,48 @@ class UserLogin(Resource):
 class UserResource(Resource):
     @users_ns.doc('get_user_details')
     @users_ns.marshal_with(user_model) 
-    @users_ns.response(404, 'User not found')
+    @users_ns.response(404, 'Користувача не знайдено')
     def get(self, user_id):
         """Отримати детальну інформацію про користувача за ID."""
         user, status_code = get_object_or_404(User, user_id)
         if status_code == 404:
             return user, status_code 
         return user, 200 
+    
+    @users_ns.doc('partially_update_user')
+    @users_ns.expect(user_patch_model)
+    @users_ns.marshal_with(user_model)
+    @users_ns.response(404, 'Користувача не знайдено')
+    @users_ns.response(400, 'Помилка валідації')
+    def patch(self, user_id):
+        user_obj = User.query.get(user_id)
+        if not user_obj:
+            users_ns.abort(404, f"Користувача з ID {user_id} не знайдено.")
+        data_to_update = users_ns.payload
+
+        if not data_to_update:
+            users_ns.abort(400, "Нема даних для оновлення")
+        
+        updated_fields_count = 0
+
+        for key, value in data_to_update.items():
+            if hasattr(user_obj, key) and key != 'id' :
+                setattr(user_obj, key, value)
+                updated_fields_count += 1
+            else:
+                current_app.logger.warning(f"Спроба оновити відстунє чи захищене поле '{key}' для користувача {user_id}")
+        if updated_fields_count == 0:
+            return {'message': 'Не було надано дійсних полів для оновлення або вказані поля не існують'}, 400
+        try:
+            db.session.commit()
+            db.session.refresh(user_obj)
+            current_app.logger.info(f"Користувача {user_id} успішно оновленно.")
+            return user_obj, 200
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Помилка у БД при оновленні користувача {user_id}: {str(e)}")
+            users_ns.abort(500, "Внутрішня помилка сервера при оновленні користувача")
+
 
 @users_ns.route('/passwordreset') 
 class RequestPasswordReset(Resource):
@@ -221,6 +256,7 @@ class ResetPasswordClassic(Resource):
     @users_ns.expect(reset_password_model, validate=True)
     @users_ns.response(200, 'Пароль успішно змінено.')
     @users_ns.response(400, 'Невірні вхідні дані - не всі поля правильно заповнені.')
+    @users_ns.response(401, 'Помилка авторизації')
     @users_ns.response(404, 'Користувача з таким номером телефону не знайдено.')
     @users_ns.response(500, 'Внутрішня помилка сервера при спробі змінити пароль.')
 
@@ -260,6 +296,7 @@ class ResetPasswordClassic(Resource):
             current_app.logger.error(f"Помилка бази даних при зміні пароля для {phone_number}: {str(e)}")
             return {'message': 'Внутрішня помилка сервера при спробі оновити пароль.'}, 500
         
+
 @guests_ns.route('/')
 class GuestResource(Resource):
     @guests_ns.doc('create_or_get_guest')
