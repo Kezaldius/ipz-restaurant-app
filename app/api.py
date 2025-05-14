@@ -123,8 +123,8 @@ dish_model = api.model('Dish', {
 
 news_model = api.model('News', {
     'id': fields.Integer(readonly=True, description='ID страви'),
-    'name': fields.String(required=True, description='Назва новини'),
-    'description': fields.String(description='Опис новини'),
+    'name': fields.String(allow_null=True, description='Назва новини'),
+    'description': fields.String(allow_null=True, description='Опис новини'),
     'image_url': fields.String(description='URL зображення'),
     'is_actual': fields.Boolean(description='Чи актуальна новина')
 })

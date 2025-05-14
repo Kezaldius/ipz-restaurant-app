@@ -178,7 +178,7 @@ class News(db.Model):
     __tablename__ = 'news'
     # Мабуть додати новинам перевірку на дату і якщо дата більше за потрібну вони самі вимикаються
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100))
     description = db.Column(db.Text)
     image_url = db.Column(db.String(255))  # URL зображення
     is_actual = db.Column(db.Boolean, default=True)  # Чи актуальна новина
