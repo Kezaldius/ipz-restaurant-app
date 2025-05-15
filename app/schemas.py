@@ -5,9 +5,9 @@ from app import db
 
 class UserSchema(SQLAlchemyAutoSchema):
     class Meta:
-        sqla_session = db.session
         model = User
         load_instance = True  # Створювати об'єкт моделі при десеріалізації
+        sqla_session = db.session
         include_relationships = False
         include_fk = False
         fields = ('id', 'phone_number', 'first_name', 'last_name', 'is_admin', 'password') # Певно ще й is_admin треба прибрати, але він поки не заважає
@@ -24,8 +24,9 @@ class UserSchema(SQLAlchemyAutoSchema):
         if len(value) < 10: # Проста перевірка довжини
              raise ValidationError('Номер телефону має містити мінімум 10 символів')
         
-        session = self.context.get('session') or db.session 
-        if User.query.filter_by(phone_number=value).first():
+        active_session = getattr(self, 'session', None) or db.session
+        
+        if active_session.query(User).filter_by(phone_number=value).first():
             raise ValidationError('Цей номер телефону вже зареєстрований.')
         
 
