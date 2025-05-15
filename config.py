@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') 
     TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
     TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
     OTP_EXPIRATION_SECONDS = 1800 # Час життя OTP у секундах. Для тестів використаємо 30 хвилин. 
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') 
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_recycle': 299, # Коли з'єднання становиться старше за 299 секунд, то пул перестворює з'єднання
         'pool_pre_ping': True # Пінгуємо БД перед з'єднанням

@@ -12,6 +12,8 @@ def create_app(config_name='default'):
     app = Flask(__name__)
     config_name = os.getenv('FLASK_CONFIG', 'default')
     app.config.from_object(config[config_name])
+    app.logger.info(f"КОНФІГУРАЦІЯ: {config_name}")
+    app.logger.info(f"QLALCHEMY_DATABASE_URI: {app.config.get('SQLALCHEMY_DATABASE_URI')}")
     CORS(app)
     db.init_app(app)
     migrate.init_app(app, db)
@@ -22,3 +24,4 @@ def create_app(config_name='default'):
     from app import routes
 
     return app
+
