@@ -5,6 +5,7 @@ from app import db
 
 class UserSchema(SQLAlchemyAutoSchema):
     class Meta:
+        sqla_session = db.session
         model = User
         load_instance = True  # Створювати об'єкт моделі при десеріалізації
         include_relationships = False
@@ -16,15 +17,17 @@ class UserSchema(SQLAlchemyAutoSchema):
     password = fields.String(load_only=True, required=True) # Отримуємо пароль, но не видаємо його в JSON
 
     @validates('phone_number')
-    def validate_phone_number(self, value):
+    def validate_phone_number(self, value, **kwargs):
         if not value:
             raise ValidationError('Номер телефону є обов\'язковим.')
         # Мейбі додати складнішу перевірку по типу регіонального номеру
         if len(value) < 10: # Проста перевірка довжини
              raise ValidationError('Номер телефону має містити мінімум 10 символів')
-
+        
+        session = self.context.get('session') or db.session 
         if User.query.filter_by(phone_number=value).first():
             raise ValidationError('Цей номер телефону вже зареєстрований.')
+        
 
     
 class GuestSchema(SQLAlchemyAutoSchema):
