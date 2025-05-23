@@ -3,7 +3,7 @@
 Цей проєкт є серверною частиною (Back-End) розробленою як курсова робота з дисциплини "Інженерія програмного забезпечення" для системи управління рестораном, розробленою на Python з використанням фреймворку Flask. API надає функціонал для управління користувачами, меню, замовленнями, бронюваннями та новинами.
 
 # Виконав
-студент 2-го курсу, групи ІО-32 Лопушенко Кирило [Telegram](https://t.me/kezald)  
+студент 2-го курсу Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського», групи ІО-32 Лопушенко Кирило [Telegram](https://t.me/kezald)  
 
 ## Основні Технології
 
@@ -71,10 +71,10 @@ pip install -r requirements.txt
 
 1. Створіть файл .env в кореневій директорії проєкту 
 2. Заповніть необхідні змінні середовища:
-     DATABASE_URL = postgresql://user:password@host:port/database_name
-     FLASK_CONFIG = production
-     TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP
-     TWILIO_AUTH_TOKEN = your_twilio_token # Якщо Ви будете використовувати OTP
+    DATABASE_URL = postgresql://user:password@host:port/database_name
+    FLASK_CONFIG = production
+    TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP
+    TWILIO_AUTH_TOKEN = your_twilio_token # Якщо Ви будете використовувати OTP
 ### Міграції бази даних
 Перед першим запуском або після змін у моделях даних необхідно застосувати міграції:
     flask db init  # Тільки якщо ще не ініціалізовано 
