@@ -80,7 +80,7 @@ pip install -r requirements.txt
     TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP <br>
     TWILIO_AUTH_TOKEN = your_twilio_token # Якщо Ви будете використовувати OTP <br>
 ### Міграції бази даних
-Перед першим запуском або після змін у моделях даних необхідно застосувати міграції:
+Перед першим запуском або після змін у моделях даних необхідно застосувати міграції: <br>
     flask db init  # Тільки якщо ще не ініціалізовано <br>
     flask db migrate -m "Назва міграції" <br>
     flask db upgrade <br>
