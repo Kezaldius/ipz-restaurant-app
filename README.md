@@ -74,7 +74,7 @@ pip install -r requirements.txt
 ### Налаштування конфігурації
 
 1. Створіть файл .env в кореневій директорії проєкту 
-2. Заповніть необхідні змінні середовища:
+2. Заповніть необхідні змінні середовища: <br>
     DATABASE_URL = postgresql://user:password@host:port/database_name <br>
     FLASK_CONFIG = production <br>
     TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP <br>
