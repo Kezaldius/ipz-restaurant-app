@@ -3,10 +3,10 @@
 Цей проєкт є серверною частиною (Back-End) розробленою як курсова робота з дисциплини "Інженерія програмного забезпечення" для системи управління рестораном, розробленою на Python з використанням фреймворку Flask. API надає функціонал для управління користувачами, меню, замовленнями, бронюваннями та новинами.
 
 # Виконав
-Студент 2-го курсу 
-Група ІО-32
-Національний технічний університет України 
-«Київський політехнічний інститут імені Ігоря Сікорського»
+Студент 2-го курсу <br>
+Група ІО-32 <br>
+Національний технічний університет України <br>
+«Київський політехнічний інститут імені Ігоря Сікорського» <br>
 Лопушенко Кирило [Telegram](https://t.me/kezald)  
 
 ## Основні Технології
@@ -75,17 +75,17 @@ pip install -r requirements.txt
 
 1. Створіть файл .env в кореневій директорії проєкту 
 2. Заповніть необхідні змінні середовища:
-    DATABASE_URL = postgresql://user:password@host:port/database_name
-    FLASK_CONFIG = production
-    TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP
-    TWILIO_AUTH_TOKEN = your_twilio_token # Якщо Ви будете використовувати OTP
+    DATABASE_URL = postgresql://user:password@host:port/database_name <br>
+    FLASK_CONFIG = production <br>
+    TWILIO_ACCOUNT_SID = your_twilio_sid  # Якщо Ви будете використовувати OTP <br>
+    TWILIO_AUTH_TOKEN = your_twilio_token # Якщо Ви будете використовувати OTP <br>
 ### Міграції бази даних
 Перед першим запуском або після змін у моделях даних необхідно застосувати міграції:
-    flask db init  # Тільки якщо ще не ініціалізовано 
-    flask db migrate -m "Назва міграції"
-    flask db upgrade
+    flask db init  # Тільки якщо ще не ініціалізовано <br>
+    flask db migrate -m "Назва міграції" <br>
+    flask db upgrade <br>
 ### Запуск додатку для розробки
-    python run.py
+    python run.py 
     Або:
     flask run
 Додаток буде доступний за адресою http://127.0.0.1:5000/
